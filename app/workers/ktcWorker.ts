@@ -60,10 +60,10 @@ const updateCurrentValues = async () => {
     console.log("Updating KTC Values...");
 
     await page.goto(
-      `https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`
+      `https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`,
+      { waitUntil: "domcontentloaded" }
     );
 
-    await page.waitForNavigation({ waitUntil: "domcontentloaded" });
     const html = await page.content();
 
     const $ = cheerio.load(html);
@@ -122,8 +122,6 @@ const updateCurrentValues = async () => {
         );
 
         updatedat = new Date();
-      } else {
-        console.log("NO VALUES FOUND IN SCRAPED HTML");
       }
     });
 
@@ -155,6 +153,8 @@ const updateCurrentValues = async () => {
       );
 
       console.log("KTC Values updated successfully...");
+    } else {
+      console.log("NO VALUES FOUND IN SCRAPED HTML");
     }
   };
   try {

@@ -2,6 +2,23 @@ import puppeteer from "puppeteer";
 import * as cheerio from "cheerio";
 import { ktcIdMapping } from "../utils/KtcIdMapping.js";
 import { pool } from "../db/pool.js";
+let browser = null;
+let page = null;
+const startBrowser = async () => {
+    if (!browser) {
+        browser = await puppeteer.launch({
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--disable-gpu",
+                "--no-zygote",
+            ],
+        });
+        page = await browser.newPage();
+    }
+};
 const queryKtcValues = async () => {
     const ktc_dates_db = await pool.query("SELECT * FROM common WHERE name = $1;", ["ktc_dates"]);
     const ktc_dates = ktc_dates_db.rows[0]?.data || {};
@@ -12,23 +29,14 @@ const queryKtcValues = async () => {
     return { ktc_dates, ktc_players, ktc_unmatched };
 };
 const updateCurrentValues = async () => {
+    await startBrowser();
     const { ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues();
     const ktcMap = ktcIdMapping;
-    const browser = await puppeteer.launch({
-        args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-extensions",
-            "--disable-gpu",
-            "--no-zygote",
-        ],
-    });
-    const page = await browser.newPage();
     const update = async () => {
+        if (!page)
+            return;
         console.log("Updating KTC Values...");
-        await page.goto(`https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`);
-        await page.waitForNetworkIdle();
+        await page.goto(`https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`, { waitUntil: "domcontentloaded" });
         const html = await page.content();
         const $ = cheerio.load(html);
         const date = new Date().toISOString().split("T")[0];
@@ -88,6 +96,9 @@ const updateCurrentValues = async () => {
         `, ["ktc_players", ktc_players, updatedat]);
             console.log("KTC Values updated successfully...");
         }
+        else {
+            console.log("NO VALUES FOUND IN SCRAPED HTML");
+        }
     };
     try {
         await update();
@@ -98,7 +109,6 @@ const updateCurrentValues = async () => {
     }
     finally {
         console.log("KTC update complete.");
-        await browser.close();
         const used = process.memoryUsage();
         for (let key in used) {
             const cat = key;
