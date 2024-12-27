@@ -19,6 +19,9 @@ const updateCurrentValues = async () => {
             "--no-sandbox",
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
+            "--disable-extensions",
+            "--disable-gpu",
+            "--no-zygote",
         ],
     });
     const page = await browser.newPage();
@@ -96,6 +99,11 @@ const updateCurrentValues = async () => {
     finally {
         console.log("KTC update complete.");
         await browser.close();
+        const used = process.memoryUsage();
+        for (let key in used) {
+            const cat = key;
+            console.log(`${key} ${Math.round((used[cat] / 1024 / 1024) * 100) / 100} MB`);
+        }
     }
 };
 setTimeout(updateCurrentValues, 1000 * 15);
