@@ -1,4 +1,7 @@
-export const ktcIdMapping = {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ktcIdMapping = void 0;
+exports.ktcIdMapping = {
     "1": "4866",
     "4": "4274",
     "6": "6039",
