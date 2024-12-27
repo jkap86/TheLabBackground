@@ -32,7 +32,9 @@ const updateCurrentValues = async () => {
   const { ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues();
 
   const ktcMap: { [ktcId: string]: string } = ktcIdMapping;
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
 
   const page = await browser.newPage();
 
