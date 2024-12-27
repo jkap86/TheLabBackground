@@ -33,12 +33,16 @@ const updateCurrentValues = async () => {
 
   const ktcMap: { [ktcId: string]: string } = ktcIdMapping;
   const browser = await puppeteer.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+    ],
   });
 
   const page = await browser.newPage();
 
-  try {
+  const update = async () => {
     console.log("Updating KTC Values...");
 
     await page.goto(
@@ -136,8 +140,12 @@ const updateCurrentValues = async () => {
 
       console.log("KTC Values updated successfully...");
     }
+  };
+  try {
+    update();
   } catch (err: any) {
     console.log(err.message);
+    update();
   } finally {
     console.log("KTC update complete.");
     await browser.close();
