@@ -1,7 +1,27 @@
-import puppeteer from "puppeteer";
+import puppeteer, { Browser, Page } from "puppeteer";
 import * as cheerio from "cheerio";
 import { ktcIdMapping } from "../utils/KtcIdMapping.js";
 import { pool } from "../db/pool.js";
+
+let browser: Browser | null = null;
+let page: Page | null = null;
+
+const startBrowser = async () => {
+  if (!browser) {
+    browser = await puppeteer.launch({
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--disable-gpu",
+        "--no-zygote",
+      ],
+    });
+
+    page = await browser.newPage();
+  }
+};
 
 const queryKtcValues = async () => {
   const ktc_dates_db = await pool.query(
@@ -29,23 +49,14 @@ const queryKtcValues = async () => {
 };
 
 const updateCurrentValues = async () => {
+  await startBrowser();
+
   const { ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues();
 
   const ktcMap: { [ktcId: string]: string } = ktcIdMapping;
-  const browser = await puppeteer.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-extensions",
-      "--disable-gpu",
-      "--no-zygote",
-    ],
-  });
-
-  const page = await browser.newPage();
 
   const update = async () => {
+    if (!page) return;
     console.log("Updating KTC Values...");
 
     await page.goto(
@@ -111,6 +122,8 @@ const updateCurrentValues = async () => {
         );
 
         updatedat = new Date();
+      } else {
+        console.log("NO VALUES FOUND IN SCRAPED HTML");
       }
     });
 
@@ -151,7 +164,6 @@ const updateCurrentValues = async () => {
     await update();
   } finally {
     console.log("KTC update complete.");
-    await browser.close();
 
     const used = process.memoryUsage();
 
