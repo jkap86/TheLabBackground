@@ -142,10 +142,10 @@ const updateCurrentValues = async () => {
     }
   };
   try {
-    update();
+    await update();
   } catch (err: any) {
     console.log(err.message);
-    update();
+    await update();
   } finally {
     console.log("KTC update complete.");
     await browser.close();

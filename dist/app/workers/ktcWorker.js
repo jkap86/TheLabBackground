@@ -15,7 +15,11 @@ const updateCurrentValues = async () => {
     const { ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues();
     const ktcMap = ktcIdMapping;
     const browser = await puppeteer.launch({
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+        ],
     });
     const page = await browser.newPage();
     const update = async () => {
@@ -83,11 +87,11 @@ const updateCurrentValues = async () => {
         }
     };
     try {
-        update();
+        await update();
     }
     catch (err) {
         console.log(err.message);
-        update();
+        await update();
     }
     finally {
         console.log("KTC update complete.");
