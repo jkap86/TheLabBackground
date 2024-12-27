@@ -8,7 +8,7 @@
     "start": "npm run build && npm run serve",
     "build": "npx tsc",
     "serve": "node dist/server.js",
-    "postinstall": "npm install && npm run build"
+    "postinstall": "npm run build"
   },
   "keywords": [],
   "author": "",
