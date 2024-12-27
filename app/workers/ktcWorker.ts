@@ -63,7 +63,7 @@ const updateCurrentValues = async () => {
       `https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`
     );
 
-    await page.waitForNetworkIdle();
+    await page.waitForNavigation({ waitUntil: "domcontentloaded" });
     const html = await page.content();
 
     const $ = cheerio.load(html);
