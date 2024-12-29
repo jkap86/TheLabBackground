@@ -1,43 +1,22 @@
-import puppeteer from "puppeteer";
 import * as cheerio from "cheerio";
 import { ktcIdMapping } from "../utils/KtcIdMapping.js";
 import { pool } from "../db/pool.js";
-let browser = null;
-let page = null;
-const startBrowser = async () => {
-    if (!browser) {
-        browser = await puppeteer.launch({
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-extensions",
-                "--disable-gpu",
-                "--no-zygote",
-            ],
-        });
-        page = await browser.newPage();
-    }
-};
+import axios from "axios";
 const queryKtcValues = async () => {
     const ktc_dates_db = await pool.query("SELECT * FROM common WHERE name = $1;", ["ktc_dates"]);
     const ktc_dates = ktc_dates_db.rows[0]?.data || {};
     const ktc_players_db = await pool.query("SELECT * FROM common WHERE name = $1;", ["ktc_players"]);
     const ktc_players = ktc_players_db.rows[0]?.data || {};
     const ktc_unmatched_db = await pool.query("SELECT * FROM common WHERE name = $1;", ["ktc_unmatched"]);
-    const ktc_unmatched = ktc_unmatched_db.rows[0]?.data || [];
+    const ktc_unmatched = ktc_unmatched_db.rows[0]?.data || { links: [] };
     return { ktc_dates, ktc_players, ktc_unmatched };
 };
 const updateCurrentValues = async () => {
-    await startBrowser();
     const { ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues();
     const ktcMap = ktcIdMapping;
     const update = async () => {
-        if (!page)
-            return;
-        console.log("Updating KTC Values...");
-        await page.goto(`https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`, { waitUntil: "domcontentloaded" });
-        const html = await page.content();
+        const response = await axios.get("https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2");
+        const html = response.data;
         const $ = cheerio.load(html);
         const date = new Date().toISOString().split("T")[0];
         if (!ktc_dates[date]) {
@@ -49,27 +28,25 @@ const updateCurrentValues = async () => {
             const match = content?.match(/var playersArray\s*=\s*(\[[\s\S]*?\]);/);
             if (match && match[1]) {
                 const playersArray = JSON.parse(match[1]);
-                const unmatched = [];
                 playersArray.forEach((playerKtcObj) => {
                     const ktcId = playerKtcObj.playerID.toString();
                     const sleeperId = ktcMap[ktcId];
-                    const value = playerKtcObj.position === "TE"
-                        ? playerKtcObj.superflexValues.tepp.value
-                        : playerKtcObj.superflexValues.value;
+                    const value = playerKtcObj.superflexValues.value;
                     if (sleeperId) {
-                        if (!ktc_players[sleeperId]) {
-                            ktc_players[sleeperId] = {
-                                name: playerKtcObj.playerName,
-                                ktcId: ktcId,
-                                position: playerKtcObj.position,
-                                values: {},
-                            };
-                        }
+                        ktc_players[sleeperId] = {
+                            name: playerKtcObj.playerName,
+                            ktcId: ktcId,
+                            link: playerKtcObj.slug,
+                            position: playerKtcObj.position,
+                            values: {
+                                ...(ktc_players[sleeperId]?.values || {}),
+                                [date]: value,
+                            },
+                        };
                         ktc_dates[date][sleeperId] = value;
-                        ktc_players[sleeperId].values[date] = value;
                     }
-                    else {
-                        unmatched.push(`${playerKtcObj.playerName}-${ktcId}`);
+                    else if (!ktc_unmatched.links.includes(playerKtcObj.slug)) {
+                        ktc_unmatched.links.push(playerKtcObj.slug);
                     }
                 });
                 updatedat = new Date();
@@ -94,6 +71,27 @@ const updateCurrentValues = async () => {
             updatedat = EXCLUDED.updatedat
           RETURNING *;
         `, ["ktc_players", ktc_players, updatedat]);
+            await pool.query(`
+          INSERT INTO common (name, data, updatedat) 
+          VALUES ($1, $2, $3)
+          ON CONFLICT (name) 
+          DO UPDATE SET 
+            data = EXCLUDED.data,
+            updatedat = EXCLUDED.updatedat
+          RETURNING *;
+        `, [
+                "ktc_unmatched",
+                {
+                    ...ktc_unmatched,
+                    links: Array.from(new Set(ktc_unmatched.links.filter((l) => {
+                        const link_array = l.split("-");
+                        const ktcId = link_array[link_array.length - 1];
+                        return !(Object.keys(ktcMap).includes(ktcId) ||
+                            parseInt(link_array[0]));
+                    }))),
+                },
+                updatedat,
+            ]);
             console.log("KTC Values updated successfully...");
         }
         else {
@@ -116,5 +114,64 @@ const updateCurrentValues = async () => {
         }
     }
 };
-setTimeout(updateCurrentValues, 1000 * 15);
+const syncAlltimeValues = async () => {
+    console.log("Begin Syncing Alltime Values");
+    const { ktc_dates, ktc_players } = await queryKtcValues();
+    const ktcMap = ktcIdMapping;
+    for await (let sleeperId of Object.values(ktcMap)) {
+        const link = ktc_players[sleeperId]?.link;
+        if (link) {
+            try {
+                const response = await axios.get("https://keeptradecut.com/dynasty-rankings/players/" + link);
+                const html = response.data;
+                const $ = cheerio.load(html);
+                $("script").each((index, element) => {
+                    const content = $(element).html();
+                    const match = content?.match(/var playerSuperflex\s*=\s*(\{[\s\S]*?\});/);
+                    if (match && match[1]) {
+                        const obj = JSON.parse(match[1]);
+                        const historicalValues = obj.overallValue;
+                        historicalValues.forEach((obj, index) => {
+                            const date_string = `20${obj.d.slice(0, 2)}-${obj.d.slice(2, 4)}-${obj.d.slice(4, 6)}`;
+                            const date = new Date(date_string).toISOString().split("T")[0];
+                            const value = obj.v;
+                            ktc_players[sleeperId].values[date] = value;
+                            if (!ktc_dates[date]) {
+                                ktc_dates[date] = {};
+                            }
+                            ktc_dates[date][sleeperId] = value;
+                        });
+                    }
+                });
+            }
+            catch (err) {
+                console.log(err.message);
+            }
+        }
+        else {
+            console.log("NO LINK FOR sleeperId - " + sleeperId);
+        }
+    }
+    const updatedat = new Date();
+    await pool.query(`
+          INSERT INTO common (name, data, updatedat) 
+          VALUES ($1, $2, $3)
+          ON CONFLICT (name) 
+          DO UPDATE SET 
+            data = EXCLUDED.data,
+            updatedat = EXCLUDED.updatedat
+          RETURNING *;
+        `, ["ktc_dates", ktc_dates, updatedat]);
+    await pool.query(`
+          INSERT INTO common (name, data, updatedat) 
+          VALUES ($1, $2, $3)
+          ON CONFLICT (name) 
+          DO UPDATE SET 
+            data = EXCLUDED.data,
+            updatedat = EXCLUDED.updatedat
+          RETURNING *;
+        `, ["ktc_players", ktc_players, updatedat]);
+    console.log("Sync Complete");
+};
+setTimeout(syncAlltimeValues, 1000);
 setInterval(updateCurrentValues, 1000 * 60 * 60);
