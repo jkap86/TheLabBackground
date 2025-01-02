@@ -1,8 +1,24 @@
 import * as cheerio from "cheerio";
-import { ktcIdMapping } from "../utils/KtcIdMapping.js";
+
 import { pool } from "../db/pool.js";
-import axios from "axios";
+import axiosInstance from "../api/axiosInstance.js";
 import fs from "fs";
+
+const createKtcSleeperIdsMapping = async () => {
+  const { ktc_players } = await queryKtcValues();
+
+  const ktsIdMapping2 = Object.fromEntries(
+    Object.keys(ktc_players).map((sleeperId) => [
+      ktc_players[sleeperId].ktcId,
+      sleeperId,
+    ])
+  );
+
+  fs.writeFileSync(
+    "./app/utils/ktcIdMapping2.json",
+    JSON.stringify(ktsIdMapping2)
+  );
+};
 
 const queryKtcValues = async () => {
   const ktc_dates_db = await pool.query(
@@ -30,12 +46,14 @@ const queryKtcValues = async () => {
 };
 
 const updateCurrentValues = async () => {
-  const { ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues();
+  let { ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues();
 
-  const ktcMap: { [ktcId: string]: string } = ktcIdMapping;
+  const ktcMap: { [ktcId: string]: string } = JSON.parse(
+    fs.readFileSync("./app/utils/ktcIdMapping2.json", "utf-8")
+  );
 
   const update = async () => {
-    const response = await axios.get(
+    const response = await axiosInstance.get(
       "https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2"
     );
 
@@ -78,6 +96,7 @@ const updateCurrentValues = async () => {
                 ktcId: ktcId,
                 link: playerKtcObj.slug,
                 position: playerKtcObj.position,
+                updatedat: ktc_players[sleeperId]?.updatedat,
                 values: {
                   ...(ktc_players[sleeperId]?.values || {}),
                   [date]: value,
@@ -85,8 +104,16 @@ const updateCurrentValues = async () => {
               };
 
               ktc_dates[date][sleeperId] = value;
-            } else if (!ktc_unmatched.links.includes(playerKtcObj.slug)) {
-              ktc_unmatched.links.push(playerKtcObj.slug);
+            } else {
+              if (!ktc_players[sleeperId]) {
+                if (!ktc_unmatched.links.includes(playerKtcObj.slug)) {
+                  ktc_unmatched.links.push(playerKtcObj.slug);
+                }
+              } else {
+                ktc_unmatched.links = ktc_unmatched.links.filter(
+                  (l: string) => l !== playerKtcObj.slug
+                );
+              }
             }
           }
         );
@@ -183,14 +210,24 @@ const syncAlltimeValues = async () => {
   console.log("Begin Syncing Alltime Values");
   const { ktc_dates, ktc_players } = await queryKtcValues();
 
-  const ktcMap: { [ktcId: string]: string } = ktcIdMapping;
+  const ktcMap: { [ktcId: string]: string } = JSON.parse(
+    fs.readFileSync("./app/utils/ktcIdMapping2.json", "utf-8")
+  );
 
-  for await (let sleeperId of Object.values(ktcMap)) {
+  const sleeperIdsToUpdate = Object.values(ktcMap).filter(
+    (sleeperId) => !(ktc_players[sleeperId]?.updatedat === 1)
+  );
+
+  console.log(`${sleeperIdsToUpdate.length} Sleeper Ids to update...`);
+
+  const increment = 25;
+  for await (let sleeperId of sleeperIdsToUpdate.slice(0, increment)) {
+    console.log(sleeperId);
     const link = ktc_players[sleeperId]?.link;
 
     if (link) {
       try {
-        const response = await axios.get(
+        const response = await axiosInstance.get(
           "https://keeptradecut.com/dynasty-rankings/players/" + link
         );
 
@@ -226,10 +263,12 @@ const syncAlltimeValues = async () => {
                 ktc_dates[date][sleeperId] = value;
               }
             );
+
+            ktc_players[sleeperId].updatedat = 1;
           }
         });
       } catch (err: any) {
-        console.log(err.message);
+        console.log(err.message, sleeperId);
       }
     } else {
       console.log("NO LINK FOR sleeperId - " + sleeperId);
@@ -265,7 +304,48 @@ const syncAlltimeValues = async () => {
   );
 
   console.log("Sync Complete");
+
+  if (sleeperIdsToUpdate.length > increment) {
+    setTimeout(syncAlltimeValues, 15000);
+  } else {
+    setTimeout(updateCurrentValues, 60000);
+    setInterval(updateCurrentValues, 1000 * 60 * 60);
+  }
 };
 
-setTimeout(syncAlltimeValues, 1000);
+setTimeout(async () => {
+  await createKtcSleeperIdsMapping();
+  await syncAlltimeValues();
+}, 5000);
+
+/*
+setTimeout(syncAlltimeValues, 5000);
 setInterval(updateCurrentValues, 1000 * 60 * 60);
+*/
+
+const insertIntoKtcPlayers = async () => {
+  const data = {};
+
+  const { ktc_players } = await queryKtcValues();
+
+  const ktc_players_updated = {
+    ...ktc_players,
+    ...data,
+  };
+
+  await pool.query(
+    `
+      INSERT INTO common (name, data, updatedat) 
+      VALUES ($1, $2, $3)
+      ON CONFLICT (name) 
+      DO UPDATE SET 
+        data = EXCLUDED.data,
+        updatedat = EXCLUDED.updatedat
+      RETURNING *;
+    `,
+    ["ktc_players", ktc_players_updated, new Date()]
+  );
+
+  console.log("ktc_players updated...");
+};
+//insertIntoKtcPlayers();

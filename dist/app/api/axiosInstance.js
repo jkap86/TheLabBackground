@@ -1,13 +1,9 @@
-"use strict";
-const https = require("https");
-const axios = require("axios");
-const axiosRetry = require("axios-retry");
+import axios from "axios";
+import axiosRetry from "axios-retry";
+import https from "https";
 const axiosInstance = axios.create({
-    headers: {
-        "content-type": "application/json",
-    },
     httpsAgent: new https.Agent({ keepAlive: true }),
-    timeout: 3000,
+    timeout: 5000,
 });
 axiosRetry(axiosInstance, {
     retries: 5,
@@ -15,4 +11,4 @@ axiosRetry(axiosInstance, {
         return 2000 + retryNumber * 1000;
     },
 });
-module.exports = axiosInstance;
+export default axiosInstance;
