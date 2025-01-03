@@ -55,8 +55,15 @@ const startWorker = (app: Express) => {
 };
 
 const userUpdateInterval = async (app: Express) => {
+  const used = process.memoryUsage();
+
+  const rss = Math.round((used["rss"] / 1024 / 1024) * 100) / 100;
+
+  console.log({ rss });
   if (updateInProgress) {
     console.log("UPDATE IN PROGRESS...");
+  } else if (rss > 500) {
+    console.log("Mem use too high...");
   } else {
     try {
       await startWorker(app);

@@ -39,8 +39,14 @@ const startWorker = (app) => {
     });
 };
 const userUpdateInterval = async (app) => {
+    const used = process.memoryUsage();
+    const rss = Math.round((used["rss"] / 1024 / 1024) * 100) / 100;
+    console.log({ rss });
     if (updateInProgress) {
         console.log("UPDATE IN PROGRESS...");
+    }
+    else if (rss > 500) {
+        console.log("Mem use too high...");
     }
     else {
         try {
@@ -51,6 +57,6 @@ const userUpdateInterval = async (app) => {
                 console.log(err.message);
         }
     }
-    setTimeout(() => userUpdateInterval(app), 10 * 1000);
+    setTimeout(() => userUpdateInterval(app), 30 * 1000);
 };
 export default userUpdateInterval;

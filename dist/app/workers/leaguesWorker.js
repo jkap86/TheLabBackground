@@ -2,7 +2,7 @@ import { parentPort } from "worker_threads";
 import { pool } from "../db/pool.js";
 import axiosInstance from "../api/axiosInstance.js";
 import { updateLeagues } from "../utils/updateLeagues.js";
-const increment_leagues = 50;
+const increment_leagues = 100;
 const updateUsers = async (league_ids_queue, season) => {
     console.log({ league_ids_queue: league_ids_queue.length });
     if (league_ids_queue.length < increment_leagues) {
