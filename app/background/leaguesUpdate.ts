@@ -6,9 +6,6 @@ import { Express } from "express";
 let updateInProgress = false;
 
 const startWorker = (worker: workerThreads.Worker, app: Express) => {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-
   updateInProgress = true;
   console.log(`Beginning User Update...`);
 
@@ -49,6 +46,9 @@ const startWorker = (worker: workerThreads.Worker, app: Express) => {
     }
   });
 };
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const worker = new workerThreads.Worker(
   path.resolve(__dirname, "../workers/leaguesWorker.js")

@@ -5,7 +5,7 @@ import axiosInstance from "../api/axiosInstance.js";
 import { SleeperLeague } from "../types/sleeperApiTypes.js";
 import { updateLeagues } from "../utils/updateLeagues.js";
 
-const increment_leagues = 100;
+const increment_leagues = 250;
 
 const updateUsers = async (league_ids_queue: string[], season: string) => {
   console.log({ league_ids_queue: league_ids_queue.length });

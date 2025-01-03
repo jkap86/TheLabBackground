@@ -2,10 +2,7 @@ import * as workerThreads from "worker_threads";
 import * as path from "path";
 import { fileURLToPath } from "url";
 let updateInProgress = false;
-const startWorker = (app) => {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const worker = new workerThreads.Worker(path.resolve(__dirname, "../workers/leaguesWorker.js"));
+const startWorker = (worker, app) => {
     updateInProgress = true;
     console.log(`Beginning User Update...`);
     const league_ids_queue = app.get("league_ids_queue") || [];
@@ -38,6 +35,9 @@ const startWorker = (app) => {
         }
     });
 };
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const worker = new workerThreads.Worker(path.resolve(__dirname, "../workers/leaguesWorker.js"));
 const userUpdateInterval = async (app) => {
     const used = process.memoryUsage();
     const rss = Math.round((used["rss"] / 1024 / 1024) * 100) / 100;
@@ -50,7 +50,7 @@ const userUpdateInterval = async (app) => {
     }
     else {
         try {
-            await startWorker(app);
+            await startWorker(worker, app);
         }
         catch (err) {
             if (err instanceof Error)
