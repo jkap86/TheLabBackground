@@ -64,7 +64,7 @@ const userUpdateInterval = async (app: Express) => {
       if (err instanceof Error) console.log(err.message);
     }
   }
-  setTimeout(() => userUpdateInterval(app), 10 * 1000);
+  setTimeout(() => userUpdateInterval(app), 30 * 1000);
 };
 
 export default userUpdateInterval;
