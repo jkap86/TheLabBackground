@@ -5,13 +5,9 @@ import { Express } from "express";
 
 let updateInProgress = false;
 
-const startWorker = (app: Express) => {
+const startWorker = (worker: workerThreads.Worker, app: Express) => {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-
-  const worker = new workerThreads.Worker(
-    path.resolve(__dirname, "../workers/leaguesWorker.js")
-  );
 
   updateInProgress = true;
   console.log(`Beginning User Update...`);
@@ -54,6 +50,10 @@ const startWorker = (app: Express) => {
   });
 };
 
+const worker = new workerThreads.Worker(
+  path.resolve(__dirname, "../workers/leaguesWorker.js")
+);
+
 const userUpdateInterval = async (app: Express) => {
   const used = process.memoryUsage();
 
@@ -66,7 +66,7 @@ const userUpdateInterval = async (app: Express) => {
     console.log("Mem use too high...");
   } else {
     try {
-      await startWorker(app);
+      await startWorker(worker, app);
     } catch (err) {
       if (err instanceof Error) console.log(err.message);
     }
