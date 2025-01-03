@@ -27,7 +27,7 @@ export type LeagueSettings = {
   reserve_allow_na: number;
   reserve_allow_doubtful: number;
   league_average_match: number;
-  rounds: number;
+  draft_rounds: number;
   playoff_week_start: number;
   trade_deadline: number;
   disable_trades: number;

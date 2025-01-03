@@ -113,7 +113,7 @@ export const updateLeagues = async (
             upcoming_draft = drafts.data.find(
               (d: SleeperDraft) =>
                 d.draft_order &&
-                d.settings.rounds === league.data.settings.rounds
+                d.settings.rounds === league.data.settings.draft_rounds
             );
           } else {
             league_draftpicks_obj = {};
