@@ -145,7 +145,10 @@ export const updateLeagues = async (
               });
             });
 
-          if (week) {
+          if (
+            week &&
+            rosters.data.find((r: SleeperRoster) => r.players?.length > 0)
+          ) {
             const trades_current = await getTrades(
               league_id,
               season === league.data.season ? week : "1",
