@@ -1,11 +1,11 @@
 import express from "express";
-import ktcRoutes from "./app/routes/ktc.routes.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 
 app.use(express.json());
-
-app.use("/ktc", ktcRoutes);
 
 const PORT = process.env.PORT || 5000;
 
@@ -14,4 +14,9 @@ app.listen(PORT, async () => {
 
   const { default: ktcUpdate } = await import("./app/background/ktcUpdate.js");
   ktcUpdate();
+
+  const { default: leaguesUpdate } = await import(
+    "./app/background/leaguesUpdate.js"
+  );
+  leaguesUpdate(app);
 });

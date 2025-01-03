@@ -211,13 +211,7 @@ setTimeout(syncAlltimeValues, 5000);
 setInterval(updateCurrentValues, 1000 * 60 * 60);
 */
 const insertIntoKtcPlayers = async () => {
-    const data = {
-        "7583": {
-            link: "sam-ehlinger-1027",
-            ktcId: "1027",
-            values: {},
-        },
-    };
+    const data = {};
     const { ktc_players } = await queryKtcValues();
     const ktc_players_updated = {
         ...ktc_players,
@@ -234,4 +228,4 @@ const insertIntoKtcPlayers = async () => {
     `, ["ktc_players", ktc_players_updated, new Date()]);
     console.log("ktc_players updated...");
 };
-insertIntoKtcPlayers();
+//insertIntoKtcPlayers();

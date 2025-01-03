@@ -8,5 +8,13 @@ const startWorker = () => {
     worker.on("error", (err) => {
         console.log(err.message);
     });
+    worker.on("exit", (code) => {
+        if (code !== 0) {
+            console.error(new Error(`Worker stopped with exit code ${code}`));
+        }
+        else {
+            console.log("Worker completed successfully");
+        }
+    });
 };
 export default startWorker;
