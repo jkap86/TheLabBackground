@@ -66,7 +66,7 @@ const userUpdateInterval = async (app: Express) => {
     console.log("Mem use too high...");
   } else {
     try {
-      await startWorker(worker, app);
+      startWorker(worker, app);
     } catch (err) {
       if (err instanceof Error) console.log(err.message);
     }

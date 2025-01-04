@@ -50,7 +50,7 @@ const userUpdateInterval = async (app) => {
     }
     else {
         try {
-            await startWorker(worker, app);
+            startWorker(worker, app);
         }
         catch (err) {
             if (err instanceof Error)

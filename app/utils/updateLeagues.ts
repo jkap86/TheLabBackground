@@ -233,7 +233,12 @@ export const updateLeagues = async (
           });
         } catch (err: unknown) {
           if (err instanceof Error) {
-            console.log(err.message);
+            if ((err as any).response?.status === 404) {
+              console.log(`Deleting League - ${league_id}`);
+              await pool.query(`DELETE FROM leagues WHERE league_id = $1`, [
+                league_id,
+              ]);
+            }
           } else {
             console.log({ err });
           }

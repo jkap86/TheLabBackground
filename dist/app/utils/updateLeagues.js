@@ -47,7 +47,7 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                     const traded_picks = await axios.get(`https://api.sleeper.app/v1/league/${league_id}/traded_picks`);
                     league_draftpicks_obj = getTeamDraftPicks(league.data, rosters.data, users.data, drafts.data, traded_picks.data);
                     upcoming_draft = drafts.data.find((d) => d.draft_order &&
-                        d.settings.rounds === league.data.settings.rounds);
+                        d.settings.rounds === league.data.settings.draft_rounds);
                 }
                 else {
                     league_draftpicks_obj = {};
@@ -71,7 +71,8 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                         league_id: league.data.league_id,
                     });
                 });
-                if (week) {
+                if (week &&
+                    rosters.data.find((r) => r.players?.length > 0)) {
                     const trades_current = await getTrades(league_id, season === league.data.season ? week : "1", rosters_w_username, upcoming_draft);
                     tradesBatch.push(...trades_current);
                     if (!league_ids_db.includes(league_id)) {
@@ -121,7 +122,11 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
             }
             catch (err) {
                 if (err instanceof Error) {
-                    console.log(err.message);
+                    if (err.response?.status === 404) {
+                        console.log(`Deleting League - ${league_id}`);
+                        const result = await pool.query(`DELETE FROM leagues WHERE league_id = $1`, [league_id]);
+                        console.log({ result });
+                    }
                 }
                 else {
                     console.log({ err });
