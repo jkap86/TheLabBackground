@@ -132,7 +132,7 @@ const updateCurrentValues = async () => {
     }
 };
 const syncAlltimeValues = async () => {
-    const controlValue = 2;
+    const controlValue = 1;
     console.log("Begin Syncing Alltime Values");
     const { ktc_dates, ktc_players } = await queryKtcValues();
     const ktcMap = JSON.parse(fs.readFileSync("./app/utils/ktcIdMapping2.json", "utf-8"));
@@ -199,7 +199,12 @@ const syncAlltimeValues = async () => {
     }
     else {
         setTimeout(updateCurrentValues, 60000);
-        setInterval(updateCurrentValues, 1000 * 60 * 60);
+        const minute = new Date().getMinutes();
+        const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;
+        console.log({ nextUpdate: new Date(new Date().getTime() + delay) });
+        setTimeout(() => {
+            setInterval(updateCurrentValues, 1000 * 60 * 60);
+        }, delay);
     }
 };
 setTimeout(async () => {

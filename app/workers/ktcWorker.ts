@@ -313,7 +313,9 @@ const syncAlltimeValues = async () => {
 
     const minute = new Date().getMinutes();
 
-    const delay = minute > 30 ? 30 - minute - 30 : 30 - minute;
+    const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;
+
+    console.log({ nextUpdate: new Date(new Date().getTime() + delay) });
 
     setTimeout(() => {
       setInterval(updateCurrentValues, 1000 * 60 * 60);
