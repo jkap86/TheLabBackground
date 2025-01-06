@@ -124,8 +124,9 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                 if (err instanceof Error) {
                     if (err.response?.status === 404) {
                         console.log(`Deleting League - ${league_id}`);
-                        const result = await pool.query(`DELETE FROM leagues WHERE league_id = $1`, [league_id]);
-                        console.log({ result });
+                        await pool.query(`DELETE FROM leagues WHERE league_id = $1`, [
+                            league_id,
+                        ]);
                     }
                 }
                 else {

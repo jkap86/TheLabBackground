@@ -207,6 +207,8 @@ const updateCurrentValues = async () => {
 };
 
 const syncAlltimeValues = async () => {
+  const controlValue = 1;
+
   console.log("Begin Syncing Alltime Values");
   const { ktc_dates, ktc_players } = await queryKtcValues();
 
@@ -215,14 +217,13 @@ const syncAlltimeValues = async () => {
   );
 
   const sleeperIdsToUpdate = Object.values(ktcMap).filter(
-    (sleeperId) => !(ktc_players[sleeperId]?.updatedat === 1)
+    (sleeperId) => !(ktc_players[sleeperId]?.updatedat === controlValue)
   );
 
   console.log(`${sleeperIdsToUpdate.length} Sleeper Ids to update...`);
 
-  const increment = 25;
+  const increment = 10;
   for await (let sleeperId of sleeperIdsToUpdate.slice(0, increment)) {
-    console.log(sleeperId);
     const link = ktc_players[sleeperId]?.link;
 
     if (link) {
@@ -264,7 +265,7 @@ const syncAlltimeValues = async () => {
               }
             );
 
-            ktc_players[sleeperId].updatedat = 1;
+            ktc_players[sleeperId].updatedat = controlValue;
           }
         });
       } catch (err: any) {
@@ -309,7 +310,14 @@ const syncAlltimeValues = async () => {
     setTimeout(syncAlltimeValues, 15000);
   } else {
     setTimeout(updateCurrentValues, 60000);
-    setInterval(updateCurrentValues, 1000 * 60 * 60);
+
+    const minute = new Date().getMinutes();
+
+    const delay = minute > 30 ? 30 - minute - 30 : 30 - minute;
+
+    setTimeout(() => {
+      setInterval(updateCurrentValues, 1000 * 60 * 60);
+    }, delay);
   }
 };
 

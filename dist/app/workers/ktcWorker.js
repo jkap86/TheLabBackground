@@ -132,14 +132,14 @@ const updateCurrentValues = async () => {
     }
 };
 const syncAlltimeValues = async () => {
+    const controlValue = 2;
     console.log("Begin Syncing Alltime Values");
     const { ktc_dates, ktc_players } = await queryKtcValues();
     const ktcMap = JSON.parse(fs.readFileSync("./app/utils/ktcIdMapping2.json", "utf-8"));
-    const sleeperIdsToUpdate = Object.values(ktcMap).filter((sleeperId) => !(ktc_players[sleeperId]?.updatedat === 1));
+    const sleeperIdsToUpdate = Object.values(ktcMap).filter((sleeperId) => !(ktc_players[sleeperId]?.updatedat === controlValue));
     console.log(`${sleeperIdsToUpdate.length} Sleeper Ids to update...`);
-    const increment = 25;
+    const increment = 10;
     for await (let sleeperId of sleeperIdsToUpdate.slice(0, increment)) {
-        console.log(sleeperId);
         const link = ktc_players[sleeperId]?.link;
         if (link) {
             try {
@@ -162,7 +162,7 @@ const syncAlltimeValues = async () => {
                             }
                             ktc_dates[date][sleeperId] = value;
                         });
-                        ktc_players[sleeperId].updatedat = 1;
+                        ktc_players[sleeperId].updatedat = controlValue;
                     }
                 });
             }
