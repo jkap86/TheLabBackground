@@ -21,3 +21,19 @@ export type UserDb = {
   updatedAt: Date;
   createdAt: Date;
 };
+
+export type DraftDb = {
+  draft_id: string;
+  season: string;
+  draft_order: {
+    [key: string]: number;
+  };
+  last_picked: number | null;
+  status: string;
+  settings: {
+    rounds: number;
+    slots_k: number;
+  };
+  type: string;
+  league_id: string;
+};

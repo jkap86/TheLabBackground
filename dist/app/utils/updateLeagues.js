@@ -6,6 +6,8 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
     const updatedLeagues = [];
     const matchupsBatch = [];
     const tradesBatch = [];
+    const startupDraftsBatch = [];
+    const rookieDraftsBatch = [];
     const batchSize = 10;
     for (let i = 0; i < leaguesToUpdate.length; i += batchSize) {
         await Promise.all(leaguesToUpdate.slice(i, i + batchSize).map(async (league_id) => {
@@ -48,6 +50,24 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                     league_draftpicks_obj = getTeamDraftPicks(league.data, rosters.data, users.data, drafts.data, traded_picks.data);
                     upcoming_draft = drafts.data.find((d) => d.draft_order &&
                         d.settings.rounds === league.data.settings.draft_rounds);
+                    startupDraftsBatch.push(...drafts.data
+                        .filter((d) => d.settings.rounds !== league.data.settings.draft_rounds)
+                        .map((d) => {
+                        return {
+                            ...d,
+                            type: "startup",
+                            league_id: league_id,
+                        };
+                    }));
+                    rookieDraftsBatch.push(...drafts.data
+                        .filter((d) => d.settings.rounds === league.data.settings.draft_rounds)
+                        .map((d) => {
+                        return {
+                            ...d,
+                            type: "rookie",
+                            league_id: league_id,
+                        };
+                    }));
                 }
                 else {
                     league_draftpicks_obj = {};
@@ -143,6 +163,8 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
             await upsertUserLeagues(db, userLeagues_db);
             await upsertMatchups(db, matchupsBatch);
             await upsertTrades(db, tradesBatch);
+            await upsertDrafts(db, startupDraftsBatch);
+            await upsertDrafts(db, rookieDraftsBatch);
             await db.query("COMMIT");
         }
         catch (err) {
@@ -491,6 +513,38 @@ export const upsertTrades = async (db, trades) => {
         }
         else {
             console.log({ err });
+        }
+    }
+};
+export const upsertDrafts = async (db, drafts) => {
+    const upsertDraftsQuery = `
+    INSERT INTO drafts (draft_id, status, type, last_picked, updatedat, league_id)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (draft_id) DO UPDATE SET
+      status = EXCLUDED.status,
+      type = EXCLUDED.type,
+      last_picked = EXCLUDED.last_picked,
+      updatedat = EXCLUDED.updatedat,
+      league_id = EXCLUDED.league_id;
+  `;
+    for (const draft of drafts) {
+        try {
+            await db.query(upsertDraftsQuery, [
+                draft.draft_id,
+                draft.status,
+                draft.type,
+                draft.last_picked,
+                new Date(),
+                draft.league_id,
+            ]);
+        }
+        catch (err) {
+            if (err instanceof Error) {
+                console.log(err.message);
+            }
+            else {
+                console.log({ err });
+            }
         }
     }
 };
