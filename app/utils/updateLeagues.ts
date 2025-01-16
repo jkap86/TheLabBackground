@@ -556,7 +556,11 @@ export const getTrades = async (
           players: [
             ...Object.keys(t.adds || {}),
             ...draft_picks.map(
-              (pick) => `${pick.season} ${pick.round}.${pick.order}`
+              (pick) =>
+                `${pick.season} ${pick.round}.${pick.order?.toLocaleString(
+                  "en-US",
+                  { minimumFractionDigits: 2 }
+                )}`
             ),
           ],
           adds: adds,

@@ -71,6 +71,11 @@ export type SleeperDraftpick = {
   round: number;
 };
 
+export type SleeperDraftDraftPick = {
+  pick_no: number;
+  player_id: string;
+};
+
 export type SleeperPlayerStat = {
   player_id: string;
   stats: { [key: string]: number };

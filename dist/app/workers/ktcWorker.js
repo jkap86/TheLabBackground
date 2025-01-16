@@ -115,7 +115,7 @@ const updateCurrentValues = async () => {
         }
     };
     try {
-        console.log("Begin KTC update");
+        console.log("Begin KTC update at " + new Date());
         await update();
     }
     catch (err) {
@@ -201,9 +201,10 @@ const syncAlltimeValues = async () => {
         setTimeout(updateCurrentValues, 60000);
         const minute = new Date().getMinutes();
         const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;
+        console.log("Next update at " + new Date(new Date().getTime() + delay));
         console.log({ nextUpdate: new Date(new Date().getTime() + delay) });
         setTimeout(() => {
-            setInterval(updateCurrentValues, 1000 * 60 * 60);
+            setInterval(updateCurrentValues, 1000 * 60 * 30);
         }, delay);
     }
 };
