@@ -557,10 +557,13 @@ export const getTrades = async (
             ...Object.keys(t.adds || {}),
             ...draft_picks.map(
               (pick) =>
-                `${pick.season} ${pick.round}.${pick.order?.toLocaleString(
-                  "en-US",
-                  { minimumFractionDigits: 2 }
-                )}`
+                `${pick.season} ${pick.round}.${
+                  (pick.order &&
+                    pick.order?.toLocaleString("en-US", {
+                      minimumIntegerDigits: 2,
+                    })) ||
+                  pick.order
+                }`
             ),
           ],
           adds: adds,
@@ -737,6 +740,7 @@ export const upsertTrades = async (db: Pool, trades: Trade[]) => {
     ON CONFLICT (transaction_id) DO UPDATE SET
       draft_picks = EXCLUDED.draft_picks,
       price_check = EXCLUDED.price_check,
+      players = EXCLUDED.players,
       managers = EXCLUDED.managers;
   `;
 

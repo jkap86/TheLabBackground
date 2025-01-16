@@ -334,7 +334,11 @@ export const getTrades = async (league_id, week, rosters_w_username, upcoming_dr
             ])),
             players: [
                 ...Object.keys(t.adds || {}),
-                ...draft_picks.map((pick) => `${pick.season} ${pick.round}.${pick.order}`),
+                ...draft_picks.map((pick) => `${pick.season} ${pick.round}.${(pick.order &&
+                    pick.order?.toLocaleString("en-US", {
+                        minimumIntegerDigits: 2,
+                    })) ||
+                    pick.order}`),
             ],
             adds: adds,
             drops: drops,
@@ -490,6 +494,7 @@ export const upsertTrades = async (db, trades) => {
     ON CONFLICT (transaction_id) DO UPDATE SET
       draft_picks = EXCLUDED.draft_picks,
       price_check = EXCLUDED.price_check,
+      players = EXCLUDED.players,
       managers = EXCLUDED.managers;
   `;
     const values = trades.flatMap((trade) => [
