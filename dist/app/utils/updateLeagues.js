@@ -6,8 +6,7 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
     const updatedLeagues = [];
     const matchupsBatch = [];
     const tradesBatch = [];
-    const startupDraftsBatch = [];
-    const rookieDraftsBatch = [];
+    const draftsBatch = [];
     const batchSize = 10;
     for (let i = 0; i < leaguesToUpdate.length; i += batchSize) {
         await Promise.all(leaguesToUpdate.slice(i, i + batchSize).map(async (league_id) => {
@@ -49,22 +48,38 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                     const traded_picks = await axios.get(`https://api.sleeper.app/v1/league/${league_id}/traded_picks`);
                     league_draftpicks_obj = getTeamDraftPicks(league.data, rosters.data, users.data, drafts.data, traded_picks.data);
                     upcoming_draft = drafts.data.find((d) => d.draft_order &&
-                        d.settings.rounds === league.data.settings.draft_rounds);
-                    startupDraftsBatch.push(...drafts.data
-                        .filter((d) => d.settings.rounds !== league.data.settings.draft_rounds)
+                        d.settings.rounds === league.data.settings.draft_rounds &&
+                        d.type === "linear");
+                    draftsBatch.push(...drafts.data
+                        .filter((d) => d.settings.rounds !== league.data.settings.draft_rounds &&
+                        d.type === "snake")
                         .map((d) => {
                         return {
                             ...d,
                             type: "startup",
+                            settings: {},
                             league_id: league_id,
                         };
                     }));
-                    rookieDraftsBatch.push(...drafts.data
-                        .filter((d) => d.settings.rounds === league.data.settings.draft_rounds)
+                    draftsBatch.push(...drafts.data
+                        .filter((d) => d.settings.rounds === league.data.settings.draft_rounds &&
+                        d.type === "linear")
                         .map((d) => {
                         return {
                             ...d,
                             type: "rookie",
+                            settings: {},
+                            league_id: league_id,
+                        };
+                    }));
+                    draftsBatch.push(...drafts.data
+                        .filter((d) => d.settings.rounds !== league.data.settings.draft_rounds &&
+                        d.type === "auction")
+                        .map((d) => {
+                        return {
+                            ...d,
+                            type: "auction",
+                            settings: {},
                             league_id: league_id,
                         };
                     }));
@@ -163,8 +178,7 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
             await upsertUserLeagues(db, userLeagues_db);
             await upsertMatchups(db, matchupsBatch);
             await upsertTrades(db, tradesBatch);
-            await upsertDrafts(db, startupDraftsBatch);
-            await upsertDrafts(db, rookieDraftsBatch);
+            await upsertDrafts(db, draftsBatch);
             await db.query("COMMIT");
         }
         catch (err) {
@@ -523,11 +537,12 @@ export const upsertTrades = async (db, trades) => {
 };
 export const upsertDrafts = async (db, drafts) => {
     const upsertDraftsQuery = `
-    INSERT INTO drafts (draft_id, status, type, last_picked, updatedat, league_id)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO drafts (draft_id, status, type, settings, last_picked, updatedat, league_id)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT (draft_id) DO UPDATE SET
       status = EXCLUDED.status,
       type = EXCLUDED.type,
+      settings = EXCLUDED.settings,
       last_picked = EXCLUDED.last_picked,
       updatedat = EXCLUDED.updatedat,
       league_id = EXCLUDED.league_id;
@@ -538,6 +553,7 @@ export const upsertDrafts = async (db, drafts) => {
                 draft.draft_id,
                 draft.status,
                 draft.type,
+                draft.settings,
                 draft.last_picked,
                 new Date(),
                 draft.league_id,

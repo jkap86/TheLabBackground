@@ -36,4 +36,5 @@ export type DraftDb = {
   };
   type: string;
   league_id: string;
+  picks: {};
 };

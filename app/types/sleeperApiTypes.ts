@@ -28,7 +28,9 @@ export type SleeperDraft = {
   settings: {
     rounds: number;
     slots_k: number;
+    budget: number;
   };
+  type: string;
 };
 
 export type SleeperTrade = {
@@ -74,6 +76,10 @@ export type SleeperDraftpick = {
 export type SleeperDraftDraftPick = {
   pick_no: number;
   player_id: string;
+  metadata: {
+    amount: string;
+    position: string;
+  };
 };
 
 export type SleeperPlayerStat = {

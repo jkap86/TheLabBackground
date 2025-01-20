@@ -19,8 +19,7 @@ app.listen(PORT, async () => {
     "./app/background/leaguesUpdate.js"
   );
   leaguesUpdate(app);
-  /*
+
   const { default: adpUpdate } = await import("./app/background/adpUpdate.js");
   adpUpdate();
-  */
 });

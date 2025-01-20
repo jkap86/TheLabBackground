@@ -12,19 +12,47 @@ const getDraftsToUpdate = async () => {
     const draft_ids_db = await pool.query(getDraftIdsQuery);
     return draft_ids_db.rows.map((row) => row.draft_id);
 };
-const getDraftPicks = async (draft_ids) => {
+const getDraftPicksUpdatedDrafts = async (draft_ids) => {
     const BATCH_SIZE = 10;
-    const draft_picks = [];
+    const updatedDrafts = [];
     for (let i = 0; i < draft_ids.length; i += BATCH_SIZE) {
         await Promise.all(draft_ids.slice(i, i + BATCH_SIZE).map(async (draft_id) => {
             try {
-                const picks = await axiosInstance.get(`https://api.sleeper.app/v1/draft/${draft_id}/picks`);
-                const picks_obj = Object.fromEntries(picks.data.map((pick) => [
-                    pick.player_id,
-                    pick.pick_no,
+                const [draft, picks] = await Promise.all([
+                    await axiosInstance.get(`https://api.sleeper.app/v1/draft/${draft_id}`),
+                    await axiosInstance.get(`https://api.sleeper.app/v1/draft/${draft_id}/picks`),
+                ]);
+                const kickers = Object.fromEntries(picks.data
+                    .filter((p) => p.metadata.position === "K")
+                    .sort((a, b) => {
+                    if (draft.data.type === "auction") {
+                        return (parseInt(b.metadata.amount) - parseInt(b.metadata.amount));
+                    }
+                    else {
+                        return a.pick_no - b.pick_no;
+                    }
+                })
+                    .map((p, index) => [
+                    p.player_id,
+                    `${draft.data.season} ${Math.ceil((index + 1) / 12)}.${(((index + 1) % 12) +
+                        1).toLocaleString("en-US", { minimumIntegerDigits: 2 })}`,
                 ]));
-                draft_picks.push({
-                    draft_id,
+                const picks_obj = Object.fromEntries(picks.data.map((pick) => [
+                    kickers[pick.player_id] || pick.player_id,
+                    draft.data.type === "auction"
+                        ? Math.round((parseInt(pick.metadata.amount) /
+                            draft.data.settings.budget) *
+                            1000) / 10
+                        : pick.pick_no,
+                ]));
+                updatedDrafts.push({
+                    ...draft.data,
+                    type: draft.data.type === "auction"
+                        ? "auction"
+                        : draft.data.type === "linear"
+                            ? "rookie"
+                            : "startup",
+                    settings: draft.data.settings,
                     picks: picks_obj,
                 });
             }
@@ -45,7 +73,7 @@ const getDraftPicks = async (draft_ids) => {
             }
         }));
     }
-    return draft_picks;
+    return updatedDrafts;
 };
 const insertDraftPicks = async (draftObjs) => {
     const insertQuery = `
@@ -79,15 +107,52 @@ const insertDraftPicks = async (draftObjs) => {
         }
     }
 };
+export const upsertDrafts = async (drafts) => {
+    const upsertDraftsQuery = `
+    INSERT INTO drafts (draft_id, status, type, settings, last_picked, updatedat, league_id, picks, picksupdatedat)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    ON CONFLICT (draft_id) DO UPDATE SET
+      status = EXCLUDED.status,
+      type = EXCLUDED.type,
+      settings = EXCLUDED.settings,
+      last_picked = EXCLUDED.last_picked,
+      updatedat = EXCLUDED.updatedat,
+      league_id = EXCLUDED.league_id,
+      picks = EXCLUDED.picks,
+      picksupdatedat = EXCLUDED.picksupdatedat;
+  `;
+    for (const draft of drafts) {
+        try {
+            await pool.query(upsertDraftsQuery, [
+                draft.draft_id,
+                draft.status,
+                draft.type,
+                draft.settings,
+                draft.last_picked,
+                new Date(),
+                draft.league_id,
+                draft.picks,
+                new Date(),
+            ]);
+        }
+        catch (err) {
+            if (err instanceof Error) {
+                console.log(err.message);
+            }
+            else {
+                console.log({ err });
+            }
+        }
+    }
+};
 setTimeout(() => {
     const draftPicksUpdate = async () => {
         console.log("Begining ADP Update...");
         const draft_ids = await getDraftsToUpdate();
-        const draftpicks = await getDraftPicks(draft_ids);
-        await insertDraftPicks(draftpicks);
+        const updatedDrafts = await getDraftPicksUpdatedDrafts(draft_ids);
+        await upsertDrafts(updatedDrafts);
         console.log("ADP Update Complete...");
-        setTimeout(draftPicksUpdate, 5 * 60 * 1000);
+        setTimeout(draftPicksUpdate, 1 * 60 * 1000);
     };
     draftPicksUpdate();
-    console.log("ADP Update Complete");
 }, 5000);
