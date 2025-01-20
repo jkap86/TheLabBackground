@@ -186,7 +186,7 @@ setTimeout(() => {
 
     await upsertDrafts(updatedDrafts);
     console.log("ADP Update Complete...");
-    setTimeout(draftPicksUpdate, 1 * 60 * 1000);
+    setTimeout(draftPicksUpdate, 5 * 60 * 1000);
   };
 
   draftPicksUpdate();
