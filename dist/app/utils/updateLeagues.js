@@ -57,7 +57,6 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                         return {
                             ...d,
                             type: "startup",
-                            settings: {},
                             league_id: league_id,
                         };
                     }));
@@ -68,7 +67,6 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                         return {
                             ...d,
                             type: "rookie",
-                            settings: {},
                             league_id: league_id,
                         };
                     }));
@@ -79,7 +77,6 @@ export const updateLeagues = async (leaguesToUpdate, season, week, pool, league_
                         return {
                             ...d,
                             type: "auction",
-                            settings: {},
                             league_id: league_id,
                         };
                     }));

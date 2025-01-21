@@ -129,7 +129,6 @@ export const updateLeagues = async (
                   return {
                     ...d,
                     type: "startup",
-                    settings: {},
                     league_id: league_id,
                   };
                 })
@@ -146,7 +145,6 @@ export const updateLeagues = async (
                   return {
                     ...d,
                     type: "rookie",
-                    settings: {},
                     league_id: league_id,
                   };
                 })
@@ -163,7 +161,6 @@ export const updateLeagues = async (
                   return {
                     ...d,
                     type: "auction",
-                    settings: {},
                     league_id: league_id,
                   };
                 })
