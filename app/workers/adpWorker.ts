@@ -36,36 +36,26 @@ const getDraftPicksUpdatedDrafts = async (draft_ids: string[]) => {
             ),
           ]);
 
-          const kickers =
-            picks.data.filter(
-              (p: SleeperDraftDraftPick) => p.metadata.position === "K"
-            ).length > 36
-              ? Object.fromEntries(
-                  picks.data
-                    .filter(
-                      (p: SleeperDraftDraftPick) => p.metadata.position === "K"
-                    )
-                    .sort(
-                      (a: SleeperDraftDraftPick, b: SleeperDraftDraftPick) => {
-                        if (draft.data.type === "auction") {
-                          return (
-                            parseInt(b.metadata.amount) -
-                            parseInt(b.metadata.amount)
-                          );
-                        } else {
-                          return a.pick_no - b.pick_no;
-                        }
-                      }
-                    )
-                    .map((p: SleeperDraftDraftPick, index: number) => [
-                      p.player_id,
-                      `${draft.data.season} ${Math.floor(index / 12) + 1}.${(
-                        (index % 12) +
-                        1
-                      ).toLocaleString("en-US", { minimumIntegerDigits: 2 })}`,
-                    ])
-                )
-              : {};
+          const kickers = Object.fromEntries(
+            picks.data
+              .filter((p: SleeperDraftDraftPick) => p.metadata.position === "K")
+              .sort((a: SleeperDraftDraftPick, b: SleeperDraftDraftPick) => {
+                if (draft.data.type === "auction") {
+                  return (
+                    parseInt(b.metadata.amount) - parseInt(b.metadata.amount)
+                  );
+                } else {
+                  return a.pick_no - b.pick_no;
+                }
+              })
+              .map((p: SleeperDraftDraftPick, index: number) => [
+                p.player_id,
+                `${draft.data.season} ${Math.floor(index / 12) + 1}.${(
+                  (index % 12) +
+                  1
+                ).toLocaleString("en-US", { minimumIntegerDigits: 2 })}`,
+              ])
+          );
 
           const picks_obj = Object.fromEntries(
             picks.data.map((pick: SleeperDraftDraftPick) => [
