@@ -23,7 +23,7 @@ type sleeperAllplayer = {
 };
 
 const controlValue = new Date().getTime() - 6 * 60 * 60 * 1000;
-
+/*
 const formatPickLink = (link: string) => {
   const link_array = link.split("-");
 
@@ -31,18 +31,8 @@ const formatPickLink = (link: string) => {
     link_array[1].charAt(0).toUpperCase() + link_array[1].slice(1)
   } ${link_array[2]}`;
 };
-
+*/
 setTimeout(async () => {
-  const { ktc_unmatched } = await queryKtcValues("dynasty");
-
-  const picks: { [key: string]: string } = {};
-
-  ktc_unmatched.links.forEach((link: string) => {
-    picks[link] = formatPickLink(link);
-  });
-
-  await addToKtcPlayers("dynasty", picks);
-
   await updateCurrentValues("dynasty");
   //await updateCurrentValues("fantasy");
 
