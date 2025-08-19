@@ -8,6 +8,7 @@ type ktcPlayerObj = {
   playerName: string;
   slug: string;
   position: string;
+  team: string;
   superflexValues: { tepp: { value: number }; value: number };
 };
 
@@ -16,6 +17,8 @@ type sleeperAllplayer = {
   position: string;
   team: string;
   full_name: string;
+  first_name: string;
+  last_name: string;
   age: string;
   fantasy_positions: string[];
   years_exp: number;
@@ -23,7 +26,7 @@ type sleeperAllplayer = {
 };
 
 const controlValue = new Date().getTime() - 6 * 60 * 60 * 1000;
-/*
+
 const formatPickLink = (link: string) => {
   const link_array = link.split("-");
 
@@ -31,8 +34,24 @@ const formatPickLink = (link: string) => {
     link_array[1].charAt(0).toUpperCase() + link_array[1].slice(1)
   } ${link_array[2]}`;
 };
-*/
+
+const convertTeamAbbrev = (ktcTeam: string) => {
+  const teamMap: { [ktcTeam: string]: string } = {
+    KCC: "KC",
+    LVR: "LV",
+    JAC: "JAX",
+    NEP: "NE",
+    TBB: "TB",
+    GBP: "GB",
+    NOS: "NO",
+    SFO: "SF",
+  };
+
+  return teamMap[ktcTeam] || ktcTeam;
+};
+
 setTimeout(async () => {
+  /*
   const dynasty_map = fs.readFileSync(
     `./app/utils/KtcSleeperIds_dynasty.json`,
     "utf8"
@@ -41,6 +60,7 @@ setTimeout(async () => {
   const ktc_map_dynasty = JSON.parse(dynasty_map);
 
   insertKtcValues("ktc_map_dynasty", ktc_map_dynasty, new Date());
+  */
 
   await updateCurrentValues("dynasty");
   //await updateCurrentValues("fantasy");
@@ -203,7 +223,7 @@ const updateCurrentValues = async (type: "dynasty" | "fantasy") => {
     if (match && match[1]) {
       const playersArray = JSON.parse(match[1]);
 
-      playersArray.forEach((playerKtcObj: ktcPlayerObj) => {
+      playersArray.forEach((playerKtcObj: ktcPlayerObj, index: number) => {
         let { sleeperId } = matchPlayer(playerKtcObj, allplayers, ktc_map);
 
         const value = playerKtcObj.superflexValues.value;
@@ -252,21 +272,41 @@ const matchPlayer = (
 ) => {
   if (ktc_map[player.slug]) return { sleeperId: ktc_map[player.slug] };
 
+  if (["-early-", "-mid-", "-late-"].some((pt) => player.slug.includes(pt))) {
+    return { sleeperId: formatPickLink(player.slug) };
+  }
+
   const getMatchName = (name: string) => {
     return name
+      .replace("Marquise Brown", "Hollywood Brown")
       .replace("Jr", "")
       .replace("III", "")
       .toLowerCase()
       .replace(/[^a-z]/g, "");
   };
 
-  const matches = Object.keys(allplayers).filter(
-    (sleeper_id) =>
-      player.position.slice(0, 2)?.toLowerCase() ===
-        allplayers[sleeper_id]?.position?.toLowerCase() &&
-      getMatchName(player.playerName) ===
-        getMatchName(allplayers[sleeper_id]?.full_name)
-  );
+  let matches = Object.keys(allplayers).filter((sleeper_id) => {
+    const positon_check =
+      player.position?.toLowerCase() ===
+      allplayers[sleeper_id]?.position?.toLowerCase();
+
+    const name_check =
+      getMatchName(player.playerName).startsWith(
+        getMatchName(allplayers[sleeper_id]?.first_name.slice(0, 3))
+      ) &&
+      getMatchName(player.playerName).includes(
+        getMatchName(allplayers[sleeper_id]?.last_name)
+      );
+
+    return positon_check && name_check;
+  });
+
+  if (matches.length > 1) {
+    matches = matches.filter(
+      (sleeper_id) =>
+        convertTeamAbbrev(player.team) === allplayers[sleeper_id]?.team
+    );
+  }
 
   if (matches.length === 1) {
     const sleeperId = matches[0];
@@ -315,11 +355,6 @@ const queryKtcValues = async (type: "dynasty" | "fantasy") => {
 
   const ktc_map = ktc_map_db.rows[0]?.data || {};
 
-  fs.writeFileSync(
-    `./app/utils/KtcSleeperIds_${type}.json`,
-    JSON.stringify(ktc_map)
-  );
-
   return { ktc_dates, ktc_players, ktc_unmatched, ktc_map };
 };
 
@@ -329,7 +364,24 @@ const queryAllPlayers = async () => {
     ["allplayers"]
   );
 
-  const allplayers = allplayers_db.rows[0]?.data || [];
+  let allplayers = allplayers_db.rows[0]?.data;
+
+  if (!allplayers) {
+    allplayers = await fetchAllPlayers();
+
+    await pool.query(
+      `
+        INSERT INTO common (name, data, updated_at) 
+        VALUES ($1, $2, $3)
+        ON CONFLICT (name) 
+        DO UPDATE SET 
+            data = EXCLUDED.data,
+            updated_at = EXCLUDED.updated_at
+        RETURNING *;
+        `,
+      ["allplayers", JSON.stringify(allplayers), new Date()]
+    );
+  }
 
   return {
     allplayers: Object.fromEntries(
@@ -377,4 +429,57 @@ const addToKtcPlayers = async (
 
   insertKtcValues(`ktc_map_${type}`, updatedMap, new Date());
   insertKtcValues(`ktc_unmatched_${type}`, updatedUnmatched, new Date());
+};
+
+const fetchAllPlayers = async () => {
+  const response = await axiosInstance.get(
+    "https://sleeper.app/v1/players/nfl"
+  );
+
+  const allplayers: { [player_id: string]: sleeperAllplayer } = response.data;
+
+  const allplayersFiltered: sleeperAllplayer[] = [];
+
+  const positions = [
+    "QB",
+    "RB",
+    "FB",
+    "WR",
+    "TE",
+    "K",
+    "DEF",
+    "DL",
+    "LB",
+    "DB",
+  ];
+
+  Object.values(allplayers)
+    .filter((player) => player.active && positions.includes(player.position))
+    .forEach((value) => {
+      const player_obj = value as sleeperAllplayer;
+
+      allplayersFiltered.push({
+        player_id: player_obj.player_id,
+        position: player_obj.position === "FB" ? "RB" : player_obj.position,
+        team: player_obj.team || "FA",
+        full_name:
+          player_obj.position === "DEF"
+            ? `${player_obj.player_id} DEF`
+            : player_obj.full_name,
+        first_name: player_obj.first_name,
+        last_name: player_obj.last_name,
+        age: player_obj.age,
+        fantasy_positions: player_obj.fantasy_positions.map((p) => {
+          if (p === "FB") {
+            return "RB";
+          } else {
+            return p;
+          }
+        }),
+        years_exp: player_obj.years_exp,
+        active: player_obj.active,
+      });
+    });
+
+  return allplayersFiltered;
 };
