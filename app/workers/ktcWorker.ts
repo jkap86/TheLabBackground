@@ -33,6 +33,15 @@ const formatPickLink = (link: string) => {
 };
 */
 setTimeout(async () => {
+  const dynasty_map = fs.readFileSync(
+    `./app/utils/KtcSleeperIds_dynasty.json`,
+    "utf8"
+  );
+
+  const ktc_map_dynasty = JSON.parse(dynasty_map);
+
+  insertKtcValues("ktc_map_dynasty", ktc_map_dynasty, new Date());
+
   await updateCurrentValues("dynasty");
   //await updateCurrentValues("fantasy");
 

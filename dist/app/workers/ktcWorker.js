@@ -3,17 +3,19 @@ import * as cheerio from "cheerio";
 import { pool } from "../lib/pool.js";
 import fs from "fs";
 const controlValue = new Date().getTime() - 6 * 60 * 60 * 1000;
-const formatPickLink = (link) => {
-    const link_array = link.split("-");
-    return `${link_array[0]} ${link_array[1].charAt(0).toUpperCase() + link_array[1].slice(1)} ${link_array[2]}`;
+/*
+const formatPickLink = (link: string) => {
+  const link_array = link.split("-");
+
+  return `${link_array[0]} ${
+    link_array[1].charAt(0).toUpperCase() + link_array[1].slice(1)
+  } ${link_array[2]}`;
 };
+*/
 setTimeout(async () => {
-    const { ktc_unmatched } = await queryKtcValues("dynasty");
-    const picks = {};
-    ktc_unmatched.links.forEach((link) => {
-        picks[link] = formatPickLink(link);
-    });
-    await addToKtcPlayers("dynasty", picks);
+    const dynasty_map = fs.readFileSync(`./app/utils/KtcSleeperIds_dynasty.json`, "utf8");
+    const ktc_map_dynasty = JSON.parse(dynasty_map);
+    insertKtcValues("ktc_map_dynasty", ktc_map_dynasty, new Date());
     await updateCurrentValues("dynasty");
     //await updateCurrentValues("fantasy");
     setTimeout(async () => {
