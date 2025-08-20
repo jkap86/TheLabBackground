@@ -64,7 +64,7 @@ const userUpdateInterval = async (app: Express) => {
   console.log({ rss });
   if (updateInProgress) {
     console.log("UPDATE IN PROGRESS...");
-  } else if (rss > 400) {
+  } else if (rss > 350) {
     console.log("Mem use too high...");
   } else {
     try {
@@ -75,7 +75,7 @@ const userUpdateInterval = async (app: Express) => {
       if (err instanceof Error) console.log(err.message);
     }
   }
-  setTimeout(() => userUpdateInterval(app), 30 * 1000);
+  setTimeout(() => userUpdateInterval(app), 60 * 1000);
 };
 
 export default userUpdateInterval;
