@@ -25,7 +25,7 @@ type sleeperAllplayer = {
   active: boolean;
 };
 
-const controlValue = new Date().getTime() - 6 * 60 * 60 * 1000;
+const controlValue = new Date().getTime() - 18 * 60 * 60 * 1000;
 
 const formatPickLink = (link: string) => {
   const link_array = link.split("-");
@@ -86,7 +86,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
 
   console.log(`${sleeperIdsToUpdate.length} ${type} Sleeper Ids to update...`);
 
-  const increment = 10;
+  const increment = 5;
 
   for await (let sleeperId of sleeperIdsToUpdate.slice(0, increment)) {
     const syncPlayer = async (type: "dynasty" | "fantasy") => {
@@ -172,7 +172,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
   } else if (sleeperIdsToUpdate.length > increment) {
     setTimeout(() => {
       syncAlltimeValues(type);
-    }, 60000);
+    }, 30000);
   } else {
     parentPort?.postMessage(false);
     const minute = new Date().getMinutes();

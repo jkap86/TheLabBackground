@@ -56,7 +56,7 @@ const updateProjections = async () => {
     console.log(`Week ${week} - Skipping projections update`);
   }
 
-  setTimeout(updateProjections, 15 * 60 * 60 * 1000);
+  setTimeout(updateProjections, 15 * 60 * 1000);
 };
 
 const insertProjections = async (
