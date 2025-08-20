@@ -80,7 +80,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
     (sleeperId) =>
       !(
         ktc_players[sleeperId]?.sync &&
-        ktc_players[sleeperId]?.sync >= controlValue
+        ktc_players[sleeperId]?.sync < controlValue
       )
   );
 
