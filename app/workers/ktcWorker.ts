@@ -170,11 +170,11 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
   } else if (sleeperIdsToUpdate.length > increment) {
     setTimeout(() => {
       syncAlltimeValues(type);
-    }, 15000);
+    }, 60000);
   } else {
     setTimeout(async () => {
       await updateCurrentValues(type);
-    }, 15000);
+    }, 60000);
 
     const minute = new Date().getMinutes();
 
@@ -259,7 +259,7 @@ const updateCurrentValues = async (type: "dynasty" | "fantasy") => {
     insertKtcValues(`ktc_unmatched_${type}`, ktc_unmatched, updated_at);
     insertKtcValues(`ktc_map_${type}`, ktc_map, updated_at);
 
-    console.log(`KTC ${type} values updated successfully...`);
+    console.log(`KTC ${type} values updated successfully at ${new Date()}`);
   } else {
     console.log("NO VALUES FOUND IN SCRAPED HTML - " + type);
   }

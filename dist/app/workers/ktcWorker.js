@@ -105,12 +105,12 @@ const syncAlltimeValues = async (type) => {
     else if (sleeperIdsToUpdate.length > increment) {
         setTimeout(() => {
             syncAlltimeValues(type);
-        }, 15000);
+        }, 60000);
     }
     else {
         setTimeout(async () => {
             await updateCurrentValues(type);
-        }, 15000);
+        }, 60000);
         const minute = new Date().getMinutes();
         const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;
         console.log("Next update at " +
@@ -170,7 +170,7 @@ const updateCurrentValues = async (type) => {
         insertKtcValues(`ktc_players_${type}`, ktc_players, updated_at);
         insertKtcValues(`ktc_unmatched_${type}`, ktc_unmatched, updated_at);
         insertKtcValues(`ktc_map_${type}`, ktc_map, updated_at);
-        console.log(`KTC ${type} values updated successfully...`);
+        console.log(`KTC ${type} values updated successfully at ${new Date()}`);
     }
     else {
         console.log("NO VALUES FOUND IN SCRAPED HTML - " + type);
@@ -206,7 +206,6 @@ const matchPlayer = (player, allplayers, ktc_map) => {
         return { sleeperId };
     }
     else {
-        console.log({ matches, player });
         return { sleeperId: undefined };
     }
 };
