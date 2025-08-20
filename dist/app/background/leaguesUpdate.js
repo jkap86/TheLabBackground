@@ -1,9 +1,8 @@
 import * as workerThreads from "worker_threads";
 import * as path from "path";
 import { fileURLToPath } from "url";
-let updateInProgress = false;
 const startWorker = (worker, app) => {
-    updateInProgress = true;
+    app.set("updateInProgress", true);
     console.log(`Beginning User Update...`);
     const league_ids_queue = app.get("league_ids_queue") || [];
     worker.postMessage({ league_ids_queue });
@@ -19,7 +18,7 @@ const startWorker = (worker, app) => {
             if (err instanceof Error)
                 console.log(err.message);
         }
-        updateInProgress = false;
+        app.set("updateInProgress", false);
         const used = process.memoryUsage();
         for (let key in used) {
             const cat = key;
@@ -29,7 +28,7 @@ const startWorker = (worker, app) => {
     worker.once("exit", (code) => {
         if (code !== 0) {
             console.error(new Error(`Worker stopped with exit code ${code}`));
-            updateInProgress = false;
+            app.set("updateInProgress", false);
             startWorker(worker, app);
         }
         else {
@@ -44,10 +43,10 @@ const userUpdateInterval = async (app) => {
     const used = process.memoryUsage();
     const rss = Math.round((used["rss"] / 1024 / 1024) * 100) / 100;
     console.log({ rss });
-    if (updateInProgress) {
+    if (app.get("updateInProgress")) {
         console.log("UPDATE IN PROGRESS...");
     }
-    else if (rss > 400) {
+    else if (rss > 350) {
         console.log("Mem use too high...");
     }
     else {
@@ -61,6 +60,6 @@ const userUpdateInterval = async (app) => {
                 console.log(err.message);
         }
     }
-    setTimeout(() => userUpdateInterval(app), 30 * 1000);
+    setTimeout(() => userUpdateInterval(app), 60 * 1000);
 };
 export default userUpdateInterval;

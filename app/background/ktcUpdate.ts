@@ -1,8 +1,9 @@
 import * as workerThreads from "worker_threads";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { Express } from "express";
 
-const startWorker = () => {
+const startWorker = (app: Express) => {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
@@ -14,10 +15,15 @@ const startWorker = () => {
     console.log(err.message);
   });
 
+  worker.on("message", (message) => {
+    console.log({ message });
+    app.set("updateInProgress", message);
+  });
+
   worker.on("exit", (code) => {
     if (code !== 0) {
       console.error(new Error(`Worker stopped with exit code ${code}`));
-      startWorker();
+      startWorker(app);
     } else {
       console.log("Worker completed successfully");
     }

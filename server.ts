@@ -13,7 +13,7 @@ app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
 
   const { default: ktcUpdate } = await import("./app/background/ktcUpdate.js");
-  ktcUpdate();
+  ktcUpdate(app);
 
   const { default: leaguesUpdate } = await import(
     "./app/background/leaguesUpdate.js"

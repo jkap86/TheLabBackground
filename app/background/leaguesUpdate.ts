@@ -3,10 +3,9 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { Express } from "express";
 
-let updateInProgress = false;
-
 const startWorker = (worker: workerThreads.Worker, app: Express) => {
-  updateInProgress = true;
+  app.set("updateInProgress", true);
+
   console.log(`Beginning User Update...`);
 
   const league_ids_queue = app.get("league_ids_queue") || [];
@@ -26,7 +25,7 @@ const startWorker = (worker: workerThreads.Worker, app: Express) => {
       if (err instanceof Error) console.log(err.message);
     }
 
-    updateInProgress = false;
+    app.set("updateInProgress", false);
 
     const used = process.memoryUsage();
 
@@ -41,7 +40,7 @@ const startWorker = (worker: workerThreads.Worker, app: Express) => {
   worker.once("exit", (code) => {
     if (code !== 0) {
       console.error(new Error(`Worker stopped with exit code ${code}`));
-      updateInProgress = false;
+      app.set("updateInProgress", false);
       startWorker(worker, app);
     } else {
       console.log("Worker completed successfully");
@@ -62,7 +61,7 @@ const userUpdateInterval = async (app: Express) => {
   const rss = Math.round((used["rss"] / 1024 / 1024) * 100) / 100;
 
   console.log({ rss });
-  if (updateInProgress) {
+  if (app.get("updateInProgress")) {
     console.log("UPDATE IN PROGRESS...");
   } else if (rss > 350) {
     console.log("Mem use too high...");

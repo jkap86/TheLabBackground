@@ -1,6 +1,7 @@
 import axiosInstance from "../lib/axiosInstance.js";
 import * as cheerio from "cheerio";
 import { pool } from "../lib/pool.js";
+import { parentPort } from "worker_threads";
 const controlValue = new Date().getTime() - 6 * 60 * 60 * 1000;
 const formatPickLink = (link) => {
     const link_array = link.split("-");
@@ -38,6 +39,7 @@ setTimeout(async () => {
     }, 10000);
 }, 5000);
 const syncAlltimeValues = async (type) => {
+    parentPort?.postMessage(true);
     const { ktc_dates, ktc_players } = await queryKtcValues(type);
     const sleeperIdsToUpdate = Object.keys(ktc_players).filter((sleeperId) => !(ktc_players[sleeperId]?.sync &&
         ktc_players[sleeperId]?.sync >= controlValue));
@@ -108,16 +110,15 @@ const syncAlltimeValues = async (type) => {
         }, 60000);
     }
     else {
-        setTimeout(async () => {
-            await updateCurrentValues(type);
-        }, 60000);
+        parentPort?.postMessage(false);
         const minute = new Date().getMinutes();
         const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;
         console.log("Next update at " +
             new Date(new Date().getTime() + delay) +
             " for " +
             type);
-        setTimeout(() => {
+        setTimeout(async () => {
+            await updateCurrentValues(type);
             setInterval(async () => {
                 await updateCurrentValues(type);
             }, 1000 * 60 * 30);
@@ -125,6 +126,7 @@ const syncAlltimeValues = async (type) => {
     }
 };
 const updateCurrentValues = async (type) => {
+    parentPort?.postMessage(true);
     const { ktc_map, ktc_dates, ktc_players, ktc_unmatched } = await queryKtcValues(type);
     const { allplayers } = await queryAllPlayers();
     const url = `https://keeptradecut.com/${type}-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`;
@@ -175,6 +177,7 @@ const updateCurrentValues = async (type) => {
     else {
         console.log("NO VALUES FOUND IN SCRAPED HTML - " + type);
     }
+    parentPort?.postMessage(false);
 };
 const matchPlayer = (player, allplayers, ktc_map) => {
     if (ktc_map[player.slug])

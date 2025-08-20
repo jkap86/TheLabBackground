@@ -1,7 +1,7 @@
 import axiosInstance from "../lib/axiosInstance.js";
 import * as cheerio from "cheerio";
 import { pool } from "../lib/pool.js";
-import fs from "fs";
+import { parentPort } from "worker_threads";
 
 type ktcPlayerObj = {
   playerID: number;
@@ -72,6 +72,8 @@ setTimeout(async () => {
 }, 5000);
 
 const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
+  parentPort?.postMessage(true);
+
   const { ktc_dates, ktc_players } = await queryKtcValues(type);
 
   const sleeperIdsToUpdate = Object.keys(ktc_players).filter(
@@ -172,10 +174,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
       syncAlltimeValues(type);
     }, 60000);
   } else {
-    setTimeout(async () => {
-      await updateCurrentValues(type);
-    }, 60000);
-
+    parentPort?.postMessage(false);
     const minute = new Date().getMinutes();
 
     const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;
@@ -187,7 +186,8 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
         type
     );
 
-    setTimeout(() => {
+    setTimeout(async () => {
+      await updateCurrentValues(type);
       setInterval(async () => {
         await updateCurrentValues(type);
       }, 1000 * 60 * 30);
@@ -196,6 +196,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
 };
 
 const updateCurrentValues = async (type: "dynasty" | "fantasy") => {
+  parentPort?.postMessage(true);
   const { ktc_map, ktc_dates, ktc_players, ktc_unmatched } =
     await queryKtcValues(type);
   const { allplayers } = await queryAllPlayers();
@@ -263,6 +264,8 @@ const updateCurrentValues = async (type: "dynasty" | "fantasy") => {
   } else {
     console.log("NO VALUES FOUND IN SCRAPED HTML - " + type);
   }
+
+  parentPort?.postMessage(false);
 };
 
 const matchPlayer = (
