@@ -25,7 +25,7 @@ type sleeperAllplayer = {
   active: boolean;
 };
 
-const controlValue = new Date().getTime() - 18 * 60 * 60 * 1000;
+const controlValue = new Date().getTime() - 12 * 60 * 60 * 1000;
 
 const formatPickLink = (link: string) => {
   const link_array = link.split("-");
@@ -80,7 +80,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
     (sleeperId) =>
       !(
         ktc_players[sleeperId]?.sync &&
-        ktc_players[sleeperId]?.sync < controlValue
+        ktc_players[sleeperId]?.sync > controlValue
       )
   );
 

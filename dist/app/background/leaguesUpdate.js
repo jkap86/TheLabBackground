@@ -46,7 +46,7 @@ const userUpdateInterval = async (app) => {
     if (app.get("updateInProgress")) {
         console.log("UPDATE IN PROGRESS...");
     }
-    else if (rss > 350) {
+    else if (rss > 400) {
         console.log("Mem use too high...");
     }
     else {

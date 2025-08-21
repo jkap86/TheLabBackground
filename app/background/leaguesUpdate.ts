@@ -69,7 +69,7 @@ const userUpdateInterval = async (app: Express) => {
     try {
       setTimeout(() => {
         startWorker(worker, app);
-      }, 10000);
+      }, 5 * 60 * 1000);
     } catch (err) {
       if (err instanceof Error) console.log(err.message);
     }
