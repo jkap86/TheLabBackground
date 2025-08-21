@@ -133,7 +133,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
                 }
               );
 
-              ktc_players[sleeperId].sync = controlValue;
+              ktc_players[sleeperId].sync = new Date().getTime();
             }
           });
         } else {

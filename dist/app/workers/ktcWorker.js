@@ -2,7 +2,7 @@ import axiosInstance from "../lib/axiosInstance.js";
 import * as cheerio from "cheerio";
 import { pool } from "../lib/pool.js";
 import { parentPort } from "worker_threads";
-const controlValue = new Date().getTime() - 6 * 60 * 60 * 1000;
+const controlValue = new Date().getTime() - 18 * 60 * 60 * 1000;
 const formatPickLink = (link) => {
     const link_array = link.split("-");
     return `${link_array[0]} ${link_array[1].charAt(0).toUpperCase() + link_array[1].slice(1)} ${link_array[2]}`;
@@ -42,9 +42,9 @@ const syncAlltimeValues = async (type) => {
     parentPort?.postMessage(true);
     const { ktc_dates, ktc_players } = await queryKtcValues(type);
     const sleeperIdsToUpdate = Object.keys(ktc_players).filter((sleeperId) => !(ktc_players[sleeperId]?.sync &&
-        ktc_players[sleeperId]?.sync >= controlValue));
+        ktc_players[sleeperId]?.sync < controlValue));
     console.log(`${sleeperIdsToUpdate.length} ${type} Sleeper Ids to update...`);
-    const increment = 10;
+    const increment = 5;
     for await (let sleeperId of sleeperIdsToUpdate.slice(0, increment)) {
         const syncPlayer = async (type) => {
             try {
@@ -71,7 +71,7 @@ const syncAlltimeValues = async (type) => {
                                 }
                                 ktc_dates[date][sleeperId] = value;
                             });
-                            ktc_players[sleeperId].sync = controlValue;
+                            ktc_players[sleeperId].sync = new Date().getTime();
                         }
                     });
                 }
@@ -107,7 +107,7 @@ const syncAlltimeValues = async (type) => {
     else if (sleeperIdsToUpdate.length > increment) {
         setTimeout(() => {
             syncAlltimeValues(type);
-        }, 60000);
+        }, 30000);
     }
     else {
         parentPort?.postMessage(false);
