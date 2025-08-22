@@ -86,7 +86,7 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
 
   console.log(`${sleeperIdsToUpdate.length} ${type} Sleeper Ids to update...`);
 
-  const increment = 5;
+  const increment = 10;
 
   for await (let sleeperId of sleeperIdsToUpdate.slice(0, increment)) {
     const syncPlayer = async (type: "dynasty" | "fantasy") => {
@@ -172,9 +172,10 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
   } else if (sleeperIdsToUpdate.length > increment) {
     setTimeout(() => {
       syncAlltimeValues(type);
-    }, 30000);
+    }, 15000);
   } else {
     parentPort?.postMessage(false);
+
     const minute = new Date().getMinutes();
 
     const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;

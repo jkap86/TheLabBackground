@@ -44,7 +44,7 @@ const syncAlltimeValues = async (type) => {
     const sleeperIdsToUpdate = Object.keys(ktc_players).filter((sleeperId) => !(ktc_players[sleeperId]?.sync &&
         ktc_players[sleeperId]?.sync > controlValue));
     console.log(`${sleeperIdsToUpdate.length} ${type} Sleeper Ids to update...`);
-    const increment = 5;
+    const increment = 10;
     for await (let sleeperId of sleeperIdsToUpdate.slice(0, increment)) {
         const syncPlayer = async (type) => {
             try {
@@ -107,7 +107,7 @@ const syncAlltimeValues = async (type) => {
     else if (sleeperIdsToUpdate.length > increment) {
         setTimeout(() => {
             syncAlltimeValues(type);
-        }, 30000);
+        }, 15000);
     }
     else {
         parentPort?.postMessage(false);

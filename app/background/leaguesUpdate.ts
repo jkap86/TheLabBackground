@@ -3,10 +3,17 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { Express } from "express";
 
-const startWorker = (worker: workerThreads.Worker, app: Express) => {
+const startWorker = (app: Express) => {
   app.set("updateInProgress", true);
 
   console.log(`Beginning User Update...`);
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+
+  const worker = new workerThreads.Worker(
+    path.resolve(__dirname, "../workers/leaguesWorker.js")
+  );
 
   const league_ids_queue = app.get("league_ids_queue") || [];
 
@@ -41,19 +48,12 @@ const startWorker = (worker: workerThreads.Worker, app: Express) => {
     if (code !== 0) {
       console.error(new Error(`Worker stopped with exit code ${code}`));
       app.set("updateInProgress", false);
-      startWorker(worker, app);
+      startWorker(app);
     } else {
       console.log("Worker completed successfully");
     }
   });
 };
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const worker = new workerThreads.Worker(
-  path.resolve(__dirname, "../workers/leaguesWorker.js")
-);
 
 const userUpdateInterval = async (app: Express) => {
   const used = process.memoryUsage();
@@ -61,20 +61,18 @@ const userUpdateInterval = async (app: Express) => {
   const rss = Math.round((used["rss"] / 1024 / 1024) * 100) / 100;
 
   console.log({ rss });
-  if (app.get("updateInProgress")) {
+  if (app.get("updateInProgress") !== false) {
     console.log("UPDATE IN PROGRESS...");
   } else if (rss > 400) {
     console.log("Mem use too high...");
   } else {
     try {
-      setTimeout(() => {
-        startWorker(worker, app);
-      }, 5 * 60 * 1000);
+      startWorker(app);
     } catch (err) {
       if (err instanceof Error) console.log(err.message);
     }
   }
-  setTimeout(() => userUpdateInterval(app), 60 * 1000);
+  setTimeout(() => userUpdateInterval(app), 30 * 1000);
 };
 
 export default userUpdateInterval;

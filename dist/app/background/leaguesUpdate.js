@@ -1,9 +1,12 @@
 import * as workerThreads from "worker_threads";
 import * as path from "path";
 import { fileURLToPath } from "url";
-const startWorker = (worker, app) => {
+const startWorker = (app) => {
     app.set("updateInProgress", true);
     console.log(`Beginning User Update...`);
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const worker = new workerThreads.Worker(path.resolve(__dirname, "../workers/leaguesWorker.js"));
     const league_ids_queue = app.get("league_ids_queue") || [];
     worker.postMessage({ league_ids_queue });
     worker.once("error", (err) => {
@@ -29,21 +32,18 @@ const startWorker = (worker, app) => {
         if (code !== 0) {
             console.error(new Error(`Worker stopped with exit code ${code}`));
             app.set("updateInProgress", false);
-            startWorker(worker, app);
+            startWorker(app);
         }
         else {
             console.log("Worker completed successfully");
         }
     });
 };
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const worker = new workerThreads.Worker(path.resolve(__dirname, "../workers/leaguesWorker.js"));
 const userUpdateInterval = async (app) => {
     const used = process.memoryUsage();
     const rss = Math.round((used["rss"] / 1024 / 1024) * 100) / 100;
     console.log({ rss });
-    if (app.get("updateInProgress")) {
+    if (app.get("updateInProgress") !== false) {
         console.log("UPDATE IN PROGRESS...");
     }
     else if (rss > 400) {
@@ -51,15 +51,13 @@ const userUpdateInterval = async (app) => {
     }
     else {
         try {
-            setTimeout(() => {
-                startWorker(worker, app);
-            }, 10000);
+            startWorker(app);
         }
         catch (err) {
             if (err instanceof Error)
                 console.log(err.message);
         }
     }
-    setTimeout(() => userUpdateInterval(app), 60 * 1000);
+    setTimeout(() => userUpdateInterval(app), 30 * 1000);
 };
 export default userUpdateInterval;

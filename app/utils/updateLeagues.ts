@@ -16,13 +16,19 @@ export const updateLeagues = async (
   dbLeagueIds: string[],
   week: string | null
 ) => {
-  const usersDb: UserDb[] = [];
-  const updatedLeagues: LeagueDb[] = [];
-  const tradesBatch: Trade[] = [];
+  const updated_league_ids: string[] = [];
+
+  let newUsersCount = 0;
+  let newLeaguesCount = 0;
+  let newTradeCount = 0;
 
   const batchSize = 10;
 
   for (let i = 0; i < leagueIdsToUpdate.length; i += batchSize) {
+    const usersDb: UserDb[] = [];
+    const updatedLeagues: LeagueDb[] = [];
+    const tradesBatch: Trade[] = [];
+
     await Promise.all(
       leagueIdsToUpdate
         .slice(i, i + batchSize)
@@ -125,6 +131,8 @@ export const updateLeagues = async (
               rosters: rostersUserInfo,
               updated_at: new Date(),
             });
+
+            updated_league_ids.push(leagueIdToUpdate);
           } catch (err: unknown) {
             if (err instanceof Error) {
               console.log(
@@ -143,26 +151,33 @@ export const updateLeagues = async (
           }
         })
     );
-  }
 
-  try {
     try {
-      await pool.query("BEGIN");
+      try {
+        await pool.query("BEGIN");
 
-      await upsertUsers(usersDb);
-      await upsertLeagues(updatedLeagues);
-      await upsertTrades(tradesBatch);
+        const newUsersCountBatch = await upsertUsers(usersDb);
+        newUsersCount += newUsersCountBatch;
 
-      await pool.query("COMMIT");
+        const newLeaguesCountBatch = await upsertLeagues(updatedLeagues);
+        newLeaguesCount += newLeaguesCountBatch;
+
+        const newTradeCountBatch = await upsertTrades(tradesBatch);
+        newTradeCount += newTradeCountBatch;
+
+        await pool.query("COMMIT");
+      } catch (err) {
+        await pool.query("ROLLBACK");
+        console.error("Error upserting leagues:", err);
+      }
     } catch (err) {
-      await pool.query("ROLLBACK");
-      console.error("Error upserting leagues:", err);
+      console.error("Error connecting to the database:", err);
     }
-  } catch (err) {
-    console.error("Error connecting to the database:", err);
   }
 
-  return updatedLeagues;
+  console.log({ newUsersCount, newLeaguesCount, newTradeCount });
+
+  return updated_league_ids;
 };
 
 export const getLeagueDraftPicksObj = (
@@ -414,65 +429,95 @@ export const getTrades = async (
 };
 
 export const upsertLeagues = async (updatedLeagues: LeagueDb[]) => {
+  if (updatedLeagues.length === 0) return 0;
+
   const upsertLeaguesQuery = `
-    INSERT INTO leagues (league_id, name, avatar, season, status, settings, scoring_settings, roster_positions, rosters, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    ON CONFLICT (league_id) DO UPDATE SET
-      name = EXCLUDED.name,
-      avatar = EXCLUDED.avatar,
-      season = EXCLUDED.season,
-      status = EXCLUDED.status,
-      settings = EXCLUDED.settings,
-      scoring_settings = EXCLUDED.scoring_settings,
-      roster_positions = EXCLUDED.roster_positions,
-      rosters = EXCLUDED.rosters,
-      updated_at = EXCLUDED.updated_at;
+    WITH new AS (
+      INSERT INTO leagues (league_id, name, avatar, season, status, settings, scoring_settings, roster_positions, rosters, updated_at)
+      VALUES ${updatedLeagues
+        .map(
+          (_, i) =>
+            `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${
+              i * 10 + 4
+            }, $${i * 10 + 5}, $${i * 10 + 6}, $${i * 10 + 7}, $${
+              i * 10 + 8
+            }, $${i * 10 + 9}, $${i * 10 + 10})`
+        )
+        .join(", ")}
+      ON CONFLICT (league_id) DO UPDATE SET
+        name = EXCLUDED.name,
+        avatar = EXCLUDED.avatar,
+        season = EXCLUDED.season,
+        status = EXCLUDED.status,
+        settings = EXCLUDED.settings,
+        scoring_settings = EXCLUDED.scoring_settings,
+        roster_positions = EXCLUDED.roster_positions,
+        rosters = EXCLUDED.rosters,
+        updated_at = EXCLUDED.updated_at
+      RETURNING (xmax = 0) AS inserted
+    )
+    SELECT
+      COUNT(*) AS inserted
+    FROM new
+    WHERE inserted;
   `;
 
-  for (const league of updatedLeagues) {
-    try {
-      await pool.query(upsertLeaguesQuery, [
-        league.league_id,
-        league.name,
-        league.avatar,
-        league.season,
-        league.status,
-        JSON.stringify(league.settings),
-        JSON.stringify(league.scoring_settings),
-        JSON.stringify(league.roster_positions),
-        JSON.stringify(league.rosters),
-        league.updated_at,
-      ]);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        console.log(err.message);
-      } else {
-        console.log({ err });
-      }
+  const values = updatedLeagues.flatMap((league) => [
+    league.league_id,
+    league.name,
+    league.avatar,
+    league.season,
+    league.status,
+    JSON.stringify(league.settings),
+    JSON.stringify(league.scoring_settings),
+    JSON.stringify(league.roster_positions),
+    JSON.stringify(league.rosters),
+    league.updated_at,
+  ]);
+
+  let newLeaguesCount = 0;
+
+  try {
+    const upserted = await pool.query(upsertLeaguesQuery, values);
+    newLeaguesCount = parseInt(upserted.rows[0].inserted);
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      console.log(err.message);
+    } else {
+      console.log({ err });
     }
   }
+
+  return newLeaguesCount;
 };
 
 export const upsertTrades = async (trades: Trade[]) => {
-  if (trades.length === 0) return;
+  if (trades.length === 0) return 0;
 
   const upsertTradesQuery = `
-    INSERT INTO trades (transaction_id, status_updated, adds, drops, draft_picks, price_check, rosters, managers, players, league_id)
-     VALUES ${trades
-       .map(
-         (_, i) =>
-           `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${i * 10 + 4}, $${
-             i * 10 + 5
-           }, $${i * 10 + 6}, $${i * 10 + 7}, $${i * 10 + 8}, $${
-             i * 10 + 9
-           }, $${i * 10 + 10})`
-       )
-       .join(", ")}
-    ON CONFLICT (transaction_id) DO UPDATE SET
-      draft_picks = EXCLUDED.draft_picks,
-      price_check = EXCLUDED.price_check,
-      players = EXCLUDED.players,
-      managers = EXCLUDED.managers;
+    WITH new AS (
+      INSERT INTO trades (transaction_id, status_updated, adds, drops, draft_picks, price_check, rosters, managers, players, league_id)
+      VALUES ${trades
+        .map(
+          (_, i) =>
+            `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${
+              i * 10 + 4
+            }, $${i * 10 + 5}, $${i * 10 + 6}, $${i * 10 + 7}, $${
+              i * 10 + 8
+            }, $${i * 10 + 9}, $${i * 10 + 10})`
+        )
+        .join(", ")}
+      ON CONFLICT (transaction_id) DO UPDATE SET
+        draft_picks = EXCLUDED.draft_picks,
+        price_check = EXCLUDED.price_check,
+        players = EXCLUDED.players,
+        managers = EXCLUDED.managers
+      RETURNING (xmax = 0) AS inserted
+    )
+    SELECT
+        COUNT(*) AS inserted
+    FROM new
+    WHERE inserted;
   `;
 
   const values = trades.flatMap((trade) => [
@@ -488,10 +533,11 @@ export const upsertTrades = async (trades: Trade[]) => {
     trade.league_id,
   ]);
 
+  let newTradeCount = 0;
+
   try {
     const upserted = await pool.query(upsertTradesQuery, values);
-
-    console.log(`${upserted.rowCount} Trades modified`);
+    newTradeCount = parseInt(upserted.rows[0].inserted);
   } catch (err: unknown) {
     if (err instanceof Error) {
       console.log(err.message);
@@ -499,44 +545,61 @@ export const upsertTrades = async (trades: Trade[]) => {
       console.log({ err });
     }
   }
+
+  return newTradeCount;
 };
 
 export const upsertUsers = async (users: UserDb[]) => {
+  if (users.length === 0) return 0;
+
   const upsertUsersQuery = `
-    INSERT INTO users (user_id, username, avatar, type, updated_at, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT (user_id) DO UPDATE SET
-      username = EXCLUDED.username,
-      avatar = EXCLUDED.avatar,
-      type = CASE
-        WHEN users.type IN ('S', 'LM') THEN users.type
-        ELSE EXCLUDED.type
-      END,
-      updated_at = EXCLUDED.updated_at;
+    WITH new AS (
+      INSERT INTO users (user_id, username, avatar, type, updated_at, created_at)
+      VALUES ${users
+        .map(
+          (_, i) =>
+            `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${
+              i * 6 + 5
+            }, $${i * 6 + 6})`
+        )
+        .join(", ")}
+      ON CONFLICT (user_id) DO UPDATE SET
+        username = EXCLUDED.username,
+        avatar = EXCLUDED.avatar,
+        type = CASE
+          WHEN users.type IN ('S', 'LM') THEN users.type
+          ELSE EXCLUDED.type
+        END,
+        updated_at = EXCLUDED.updated_at
+      RETURNING (xmax = 0) AS inserted
+    )
+    SELECT
+        COUNT(*) AS inserted
+    FROM new
+    WHERE inserted;
   `;
 
-  let modified = 0;
+  const values = users.flatMap((user) => [
+    user.user_id,
+    user.username,
+    user.avatar,
+    user.type,
+    user.updated_at,
+    user.created_at,
+  ]);
 
-  for (const user of users) {
-    try {
-      const upserted = await pool.query(upsertUsersQuery, [
-        user.user_id,
-        user.username,
-        user.avatar,
-        user.type,
-        user.updated_at,
-        user.created_at,
-      ]);
+  let newUsersCount = 0;
 
-      modified += upserted.rowCount || 0;
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        console.log(err.message);
-      } else {
-        console.log({ err });
-      }
+  try {
+    const upserted = await pool.query(upsertUsersQuery, values);
+
+    newUsersCount = parseInt(upserted.rows[0].inserted);
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      console.log(err.message);
+    } else {
+      console.log({ err });
     }
   }
-
-  console.log(`Upserting ${modified} users...`);
+  return newUsersCount;
 };
