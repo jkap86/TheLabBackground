@@ -16,7 +16,6 @@ const startWorker = (app: Express) => {
   });
 
   worker.on("message", (message) => {
-    console.log({ message });
     app.set("updateInProgress", message);
   });
 
@@ -26,6 +25,15 @@ const startWorker = (app: Express) => {
       startWorker(app);
     } else {
       console.log("Worker completed successfully");
+      const minute = new Date().getMinutes();
+
+      const delay = (minute > 30 ? 30 - minute - 30 : 30 - minute) * 60000;
+
+      console.log(
+        "Next KTC update at " + new Date(new Date().getTime() + delay)
+      );
+
+      setTimeout(async () => startWorker, delay);
     }
   });
 };
