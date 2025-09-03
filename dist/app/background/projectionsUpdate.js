@@ -15,6 +15,7 @@ const startWorker = () => {
         }
         else {
             console.log("Worker completed successfully");
+            setTimeout(startWorker, 15 * 60 * 1000);
         }
     });
 };

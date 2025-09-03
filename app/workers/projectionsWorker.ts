@@ -1,3 +1,4 @@
+import { parentPort } from "worker_threads";
 import axiosInstance from "../lib/axiosInstance.js";
 import { pool } from "../lib/pool.js";
 
@@ -56,7 +57,7 @@ const updateProjections = async () => {
     console.log(`Week ${week} - Skipping projections update`);
   }
 
-  setTimeout(updateProjections, 15 * 60 * 1000);
+  parentPort?.close();
 };
 
 const insertProjections = async (

@@ -33,7 +33,7 @@ const startWorker = (app: Express) => {
         "Next KTC update at " + new Date(new Date().getTime() + delay)
       );
 
-      setTimeout(async () => startWorker, delay);
+      setTimeout(async () => startWorker(app), delay);
     }
   });
 };
