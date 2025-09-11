@@ -80,6 +80,8 @@ const syncAlltimeValues = async (type) => {
                 }
             }
             catch (err) {
+                if (err.response?.status === 404)
+                    delete ktc_players[sleeperId];
                 console.log(err.message, sleeperId);
                 console.log(ktc_players[sleeperId]?.link);
             }

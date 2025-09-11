@@ -140,6 +140,8 @@ const syncAlltimeValues = async (type: "dynasty" | "fantasy") => {
           console.log(`No ${type} link for ${sleeperId}`);
         }
       } catch (err: any) {
+        if (err.response?.status === 404) delete ktc_players[sleeperId];
+
         console.log(err.message, sleeperId);
 
         console.log(ktc_players[sleeperId]?.link);

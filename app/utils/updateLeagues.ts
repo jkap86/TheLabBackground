@@ -119,6 +119,43 @@ export const updateLeagues = async (
               tradesBatch.push(...currentLeagueTrades);
             }
 
+            if (
+              week &&
+              !dbLeagueIds.includes(leagueIdToUpdate) &&
+              parseInt(week) > 1 &&
+              parseInt(week) <= 18
+            ) {
+              let week_to_fetch = parseInt(week) - 1;
+
+              while (week_to_fetch > 0) {
+                const currentLeagueTrades = await getTrades(
+                  league.data,
+                  week_to_fetch.toString(),
+                  rostersUserInfo,
+                  upcomingDraft,
+                  startupCompletionTime
+                );
+
+                tradesBatch.push(...currentLeagueTrades);
+                week_to_fetch--;
+              }
+            } else if (
+              week &&
+              [2, 3, 4, 5].includes(new Date().getDay()) &&
+              parseInt(week) > 1 &&
+              parseInt(week) <= 18
+            ) {
+              const currentLeagueTrades = await getTrades(
+                league.data,
+                (parseInt(week) - 1).toString(),
+                rostersUserInfo,
+                upcomingDraft,
+                startupCompletionTime
+              );
+
+              tradesBatch.push(...currentLeagueTrades);
+            }
+
             updatedLeagues.push({
               league_id: leagueIdToUpdate,
               name: league.data.name,
