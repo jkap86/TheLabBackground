@@ -12,4 +12,10 @@ app.listen(PORT, async () => {
     leaguesUpdate(app);
     const { default: projectionsUpdate } = await import("./app/background/projectionsUpdate.js");
     projectionsUpdate();
+    /*
+    const { default: statsUpdate } = await import(
+      "./app/background/historicalStats.js"
+    );
+    statsUpdate();
+    */
 });

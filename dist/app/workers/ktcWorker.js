@@ -2,7 +2,136 @@ import axiosInstance from "../lib/axiosInstance.js";
 import * as cheerio from "cheerio";
 import { pool } from "../lib/pool.js";
 import { parentPort } from "worker_threads";
+let syncComplete = false;
+setTimeout(async () => {
+    /*
+    await updateCurrentValues("dynasty");
+  
+    setTimeout(async () => {
+      await syncAlltimeValues("dynasty");
+    }, 10000);
+    */
+    await updateKtcDynastyValues();
+    if (!syncComplete) {
+        setTimeout(async () => {
+            await syncKtcDynastyValues();
+        }, 10000);
+    }
+}, 5000);
 const controlValue = new Date().getTime() - 12 * 60 * 60 * 1000;
+const syncKtcDynastyValues = async () => {
+    parentPort?.postMessage(true);
+    const { ktc_map_dynasty } = await getKtcMapAndUnmatched();
+    const linksToUpdate = Object.keys(ktc_map_dynasty).filter((link) => !(ktc_map_dynasty[link]?.sync &&
+        ktc_map_dynasty[link]?.sync > controlValue));
+    console.log(`${linksToUpdate.length} Dynasty Players to update...`);
+    const increment = 10;
+    for await (let link of linksToUpdate.slice(0, increment)) {
+        const sleeper_id = ktc_map_dynasty[link].sleeper_id;
+        const syncPlayer = async () => {
+            try {
+                const player_historical_values = {};
+                const response = await axiosInstance.get(`https://keeptradecut.com/dynasty-rankings/players/` + link);
+                const html = response.data;
+                const $ = cheerio.load(html);
+                $("script").each((index, element) => {
+                    const content = $(element).html();
+                    const match = content?.match(/var playerSuperflex\s*=\s*(\{[\s\S]*?\});/);
+                    if (match && match[1]) {
+                        const playerObj = JSON.parse(match[1]);
+                        const position = playerObj.adjacentPositionalPlayers[0]?.position;
+                        const historicalValues = position === "TE"
+                            ? playerObj.tepp.history
+                            : playerObj.overallValue;
+                        historicalValues.forEach((obj) => {
+                            const overall_rank = playerObj.overallRankHistory.find((or) => or.d === obj.d)?.v ?? null;
+                            const position_rank = playerObj.positionalRankHistory.find((or) => or.d === obj.d)?.v ?? null;
+                            const date_string = `20${obj.d.slice(0, 2)}-${obj.d.slice(2, 4)}-${obj.d.slice(4, 6)}`;
+                            const date = new Date(date_string).toISOString().split("T")[0];
+                            const value = obj.v;
+                            player_historical_values[date] = {
+                                player_id: sleeper_id,
+                                date,
+                                value,
+                                overall_rank,
+                                position_rank,
+                            };
+                        });
+                        ktc_map_dynasty[link].sync = new Date().getTime();
+                    }
+                });
+                await insertUpdatedValues(Object.values(player_historical_values));
+                await insertIntoCommon("ktc_map_dynasty", ktc_map_dynasty, new Date());
+            }
+            catch (err) {
+                if (err.response?.status === 404)
+                    delete ktc_map_dynasty[link];
+                console.log(err.message, link);
+            }
+        };
+        await syncPlayer();
+    }
+    console.log("sync batch inserted");
+    if (Object.keys(ktc_map_dynasty).length === 0) {
+        setTimeout(async () => {
+            await updateKtcDynastyValues();
+            setTimeout(async () => {
+                await syncKtcDynastyValues();
+            }, 15000);
+        }, 15000);
+    }
+    else if (linksToUpdate.length > increment) {
+        setTimeout(async () => {
+            await syncKtcDynastyValues();
+        }, 15000);
+    }
+    else {
+        syncComplete = true;
+        parentPort?.postMessage(false);
+        parentPort?.close();
+    }
+};
+const updateKtcDynastyValues = async () => {
+    parentPort?.postMessage(true);
+    const { ktc_map_dynasty, ktc_unmatched_dynasty } = await getKtcMapAndUnmatched();
+    const { allplayers } = await queryAllPlayers();
+    const url = `https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE|RDP&format=2`;
+    const response = await axiosInstance.get(url);
+    const html = response.data;
+    const $ = cheerio.load(html);
+    const date = new Date().toISOString().split("T")[0];
+    const currentValues = [];
+    $("script").each((index, element) => {
+        const content = $(element).html();
+        const match = content?.match(/var playersArray\s*=\s*(\[[\s\S]*?\]);/);
+        if (match && match[1]) {
+            const playersArray = JSON.parse(match[1]);
+            playersArray.forEach((playerKtcObj, index) => {
+                let { sleeperId } = matchPlayer(playerKtcObj, allplayers, ktc_map_dynasty);
+                if (sleeperId) {
+                    const overall_rank = playerKtcObj.superflexValues.tepp.rank;
+                    const position_rank = playerKtcObj.superflexValues.tepp.positionalRank;
+                    const value = playerKtcObj.superflexValues.tepp.value;
+                    currentValues.push({
+                        player_id: sleeperId,
+                        date,
+                        value,
+                        overall_rank,
+                        position_rank,
+                    });
+                }
+                else if (!ktc_unmatched_dynasty.links.includes(playerKtcObj.slug)) {
+                    ktc_unmatched_dynasty.links.push(playerKtcObj.slug);
+                }
+            });
+        }
+    });
+    await insertUpdatedValues(currentValues);
+    await insertIntoCommon("ktc_map_dynasty", ktc_map_dynasty, new Date());
+    await insertIntoCommon("ktc_unmatched_dynasty", ktc_unmatched_dynasty, new Date());
+    console.log(`KTC dynasty values updated successfully at ${new Date()}`);
+    parentPort?.postMessage(false);
+};
 const formatPickLink = (link) => {
     const link_array = link.split("-");
     return `${link_array[0]} ${link_array[1].charAt(0).toUpperCase() + link_array[1].slice(1)} ${link_array[2]}`;
@@ -20,24 +149,39 @@ const convertTeamAbbrev = (ktcTeam) => {
     };
     return teamMap[ktcTeam] || ktcTeam;
 };
-setTimeout(async () => {
-    /*
-    const dynasty_map = fs.readFileSync(
-      `./app/utils/KtcSleeperIds_dynasty.json`,
-      "utf8"
-    );
-  
-    const ktc_map_dynasty = JSON.parse(dynasty_map);
-  
-    insertKtcValues("ktc_map_dynasty", ktc_map_dynasty, new Date());
-    */
-    await updateCurrentValues("dynasty");
-    //await updateCurrentValues("fantasy");
-    setTimeout(async () => {
-        await syncAlltimeValues("dynasty");
-        //await syncAlltimeValues("fantasy");
-    }, 10000);
-}, 5000);
+const getKtcMapAndUnmatched = async () => {
+    const ktc_unmatched_db = await pool.query("SELECT * FROM common WHERE name = $1;", [`ktc_unmatched_dynasty`]);
+    const ktc_unmatched_dynasty = ktc_unmatched_db.rows[0]?.data || { links: [] };
+    const ktc_map_db = await pool.query("SELECT * FROM common WHERE name = $1;", [
+        `ktc_map_dynasty`,
+    ]);
+    const ktc_map_dynasty = ktc_map_db.rows[0]?.data || {};
+    return { ktc_map_dynasty, ktc_unmatched_dynasty };
+};
+const insertUpdatedValues = async (data) => {
+    if (data.length === 0)
+        return;
+    const query = `
+        INSERT INTO ktc_dynasty (player_id, date, value, overall_rank, position_rank) 
+        VALUES  ${data
+        .map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`)
+        .join(", ")}
+        ON CONFLICT (player_id, date) 
+        DO UPDATE SET 
+            value = EXCLUDED.value,
+            overall_rank = EXCLUDED.overall_rank,
+            position_rank = EXCLUDED.position_rank
+        RETURNING *;
+        `;
+    const values = data.flatMap((d) => [
+        d.player_id,
+        d.date,
+        d.value,
+        d.overall_rank,
+        d.position_rank,
+    ]);
+    await pool.query(query, values);
+};
 const syncAlltimeValues = async (type) => {
     parentPort?.postMessage(true);
     const { ktc_dates, ktc_players } = await queryKtcValues(type);
@@ -90,8 +234,8 @@ const syncAlltimeValues = async (type) => {
     }
     const updated_at = new Date();
     try {
-        await insertKtcValues(`ktc_dates_${type}`, ktc_dates, updated_at);
-        await insertKtcValues(`ktc_players_${type}`, ktc_players, updated_at);
+        await insertIntoCommon(`ktc_dates_${type}`, ktc_dates, updated_at);
+        await insertIntoCommon(`ktc_players_${type}`, ktc_players, updated_at);
         console.log("synced values inserted " + type);
     }
     catch (err) {
@@ -136,7 +280,7 @@ const updateCurrentValues = async (type) => {
             const playersArray = JSON.parse(match[1]);
             playersArray.forEach((playerKtcObj, index) => {
                 let { sleeperId } = matchPlayer(playerKtcObj, allplayers, ktc_map);
-                const value = playerKtcObj.superflexValues.value;
+                const value = playerKtcObj.superflexValues.tepp.value;
                 if (sleeperId) {
                     if (!ktc_map[playerKtcObj.slug]) {
                         ktc_map[playerKtcObj.slug] = sleeperId;
@@ -159,10 +303,10 @@ const updateCurrentValues = async (type) => {
         }
     });
     if (updated_at) {
-        insertKtcValues(`ktc_dates_${type}`, ktc_dates, updated_at);
-        insertKtcValues(`ktc_players_${type}`, ktc_players, updated_at);
-        insertKtcValues(`ktc_unmatched_${type}`, ktc_unmatched, updated_at);
-        insertKtcValues(`ktc_map_${type}`, ktc_map, updated_at);
+        insertIntoCommon(`ktc_dates_${type}`, ktc_dates, updated_at);
+        insertIntoCommon(`ktc_players_${type}`, ktc_players, updated_at);
+        insertIntoCommon(`ktc_unmatched_${type}`, ktc_unmatched, updated_at);
+        insertIntoCommon(`ktc_map_${type}`, ktc_map, updated_at);
         console.log(`KTC ${type} values updated successfully at ${new Date()}`);
     }
     else {
@@ -172,7 +316,7 @@ const updateCurrentValues = async (type) => {
 };
 const matchPlayer = (player, allplayers, ktc_map) => {
     if (ktc_map[player.slug])
-        return { sleeperId: ktc_map[player.slug] };
+        return { sleeperId: ktc_map[player.slug].sleeper_id };
     if (["-early-", "-mid-", "-late-"].some((pt) => player.slug.includes(pt))) {
         return { sleeperId: formatPickLink(player.slug) };
     }
@@ -196,7 +340,7 @@ const matchPlayer = (player, allplayers, ktc_map) => {
     }
     if (matches.length === 1) {
         const sleeperId = matches[0];
-        ktc_map[player.slug] = sleeperId;
+        ktc_map[player.slug] = { sleeper_id: sleeperId, sync: 0 };
         return { sleeperId };
     }
     else {
@@ -238,7 +382,7 @@ const queryAllPlayers = async () => {
         ])),
     };
 };
-const insertKtcValues = async (field, data, updated_at) => {
+const insertIntoCommon = async (field, data, updated_at) => {
     await pool.query(`
         INSERT INTO common (name, data, updated_at) 
         VALUES ($1, $2, $3)
@@ -258,8 +402,8 @@ const addToKtcPlayers = async (type, data) => {
     const updatedUnmatched = {
         links: ktc_unmatched.links.filter((l) => !Object.keys(data).some((p) => p === l)),
     };
-    insertKtcValues(`ktc_map_${type}`, updatedMap, new Date());
-    insertKtcValues(`ktc_unmatched_${type}`, updatedUnmatched, new Date());
+    insertIntoCommon(`ktc_map_${type}`, updatedMap, new Date());
+    insertIntoCommon(`ktc_unmatched_${type}`, updatedUnmatched, new Date());
 };
 const fetchAllPlayers = async () => {
     const response = await axiosInstance.get("https://sleeper.app/v1/players/nfl");

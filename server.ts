@@ -24,4 +24,11 @@ app.listen(PORT, async () => {
     "./app/background/projectionsUpdate.js"
   );
   projectionsUpdate();
+
+  /*
+  const { default: statsUpdate } = await import(
+    "./app/background/historicalStats.js"
+  );
+  statsUpdate();
+  */
 });
