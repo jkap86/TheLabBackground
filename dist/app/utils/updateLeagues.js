@@ -1,235 +1,157 @@
-import { pool } from "../lib/pool.js";
 import axiosInstance from "../lib/axiosInstance.js";
-export const updateLeagues = async (leagueIdsToUpdate, dbLeagueIds, week) => {
-    const updated_league_ids = [];
-    let newUsersCount = 0;
-    let newLeaguesCount = 0;
-    let newTradeCount = 0;
-    const batchSize = 10;
-    for (let i = 0; i < leagueIdsToUpdate.length; i += batchSize) {
-        const usersDb = [];
-        const updatedLeagues = [];
-        const tradesBatch = [];
-        await Promise.all(leagueIdsToUpdate
-            .slice(i, i + batchSize)
-            .map(async (leagueIdToUpdate) => {
+import { pool } from "../lib/pool.js";
+export async function updateLeagues(toUpdate, db, week) {
+    const usersToUpsert = [];
+    const leaguesToUpsert = [];
+    const tradesToUpsert = [];
+    const batchSize = 5;
+    for (let i = 0; i < toUpdate.length; i += batchSize) {
+        await Promise.all(toUpdate.slice(i, i + batchSize).map(async (league_id) => {
             try {
-                const league = await axiosInstance.get(`https://api.sleeper.app/v1/league/${leagueIdToUpdate}`);
-                const rosters = await axiosInstance.get(`https://api.sleeper.app/v1/league/${leagueIdToUpdate}/rosters`);
-                const users = await axiosInstance.get(`https://api.sleeper.app/v1/league/${leagueIdToUpdate}/users`);
-                let leagueDraftPicksObj;
-                let upcomingDraft;
-                let startupCompletionTime;
-                if (league.data.settings.type === 2) {
-                    const drafts = await axiosInstance.get(`https://api.sleeper.app/v1/league/${leagueIdToUpdate}/drafts`);
-                    const tradedPicks = await axiosInstance.get(`https://api.sleeper.app/v1/league/${leagueIdToUpdate}/traded_picks`);
-                    upcomingDraft = drafts.data.find((x) => x.season === league.data.season &&
-                        x.settings.rounds === league.data.settings.draft_rounds);
-                    startupCompletionTime = league.data.previous_league_id
-                        ? 1
-                        : drafts.data.find((x) => x.status === "complete" &&
-                            x.settings.rounds > league.data.settings.draft_rounds)?.last_picked || -1;
-                    leagueDraftPicksObj = getLeagueDraftPicksObj(league.data, rosters.data, users.data, upcomingDraft?.status === "complete"
-                        ? undefined
-                        : upcomingDraft, tradedPicks.data);
-                }
-                else {
-                    leagueDraftPicksObj = {};
-                    startupCompletionTime = 1;
-                }
-                const rostersUserInfo = getRostersUserInfo(rosters.data, users.data, leagueDraftPicksObj);
-                rostersUserInfo
-                    .filter((ru) => ru.user_id)
-                    .forEach((ru) => {
-                    if (!usersDb.some((u) => u.user_id === ru.user_id)) {
-                        usersDb.push({
-                            user_id: ru.user_id,
-                            username: ru.username,
-                            avatar: ru.avatar,
-                            type: "",
-                            updated_at: new Date(),
-                            created_at: new Date(),
+                const league = await axiosInstance.get(`https://api.sleeper.app/v1/league/${league_id}`);
+                const rosters = await axiosInstance.get(`https://api.sleeper.app/v1/league/${league_id}/rosters`);
+                const users = await axiosInstance.get(`https://api.sleeper.app/v1/league/${league_id}/users`);
+                const drafts = await axiosInstance.get(`https://api.sleeper.app/v1/league/${league_id}/drafts`);
+                const tradedPicks = await axiosInstance.get(`https://api.sleeper.app/v1/league/${league_id}/traded_picks`);
+                const { draftPicks, draftOrder, startupCompletionTime } = getLeagueDraftPicks(league.data, rosters.data, users.data, drafts.data, tradedPicks.data);
+                const rostersUsername = getRostersUsernames(rosters.data, users.data, draftPicks);
+                rostersUsername.forEach((roster) => {
+                    if (!usersToUpsert.some((user) => user.user_id === roster.user_id) &&
+                        roster.user_id) {
+                        usersToUpsert.push({
+                            user_id: roster.user_id,
+                            username: roster.username,
+                            avatar: roster.avatar,
+                            type: "LM",
                         });
                     }
                 });
-                if (week) {
-                    const currentLeagueTrades = await getTrades(league.data, week, rostersUserInfo, upcomingDraft, startupCompletionTime);
-                    tradesBatch.push(...currentLeagueTrades);
-                }
-                if (week &&
-                    !dbLeagueIds.includes(leagueIdToUpdate) &&
-                    parseInt(week) > 1 &&
-                    parseInt(week) <= 18) {
-                    let week_to_fetch = parseInt(week) - 1;
-                    while (week_to_fetch > 0) {
-                        const currentLeagueTrades = await getTrades(league.data, week_to_fetch.toString(), rostersUserInfo, upcomingDraft, startupCompletionTime);
-                        tradesBatch.push(...currentLeagueTrades);
-                        week_to_fetch--;
-                    }
-                }
-                else if (week &&
-                    [2, 3, 4, 5].includes(new Date().getDay()) &&
-                    parseInt(week) > 1 &&
-                    parseInt(week) <= 18) {
-                    const currentLeagueTrades = await getTrades(league.data, (parseInt(week) - 1).toString(), rostersUserInfo, upcomingDraft, startupCompletionTime);
-                    tradesBatch.push(...currentLeagueTrades);
-                }
-                updatedLeagues.push({
-                    league_id: leagueIdToUpdate,
+                const trades = await getTrades(league.data, week, rostersUsername, draftOrder, startupCompletionTime);
+                tradesToUpsert.push(...trades);
+                leaguesToUpsert.push({
+                    league_id: league.data.league_id,
                     name: league.data.name,
                     avatar: league.data.avatar,
-                    season: league.data.season,
-                    status: league.data.status,
+                    roster_positions: league.data.roster_positions || [],
+                    scoring_settings: league.data.scoring_settings || {},
                     settings: league.data.settings,
-                    scoring_settings: league.data.scoring_settings,
-                    roster_positions: league.data.roster_positions,
-                    rosters: rostersUserInfo,
-                    updated_at: new Date(),
+                    rosters: rostersUsername,
+                    status: league.data.status,
+                    season: league.data.season,
                 });
-                updated_league_ids.push(leagueIdToUpdate);
             }
             catch (err) {
                 if (err instanceof Error) {
-                    console.log(err.message + ": Error getting league info " + leagueIdToUpdate);
-                    if (err.response?.status === 404) {
-                        console.log(`Deleting League - ${leagueIdToUpdate}`);
-                        await pool.query(`DELETE FROM leagues WHERE league_id = $1`, [
-                            leagueIdToUpdate,
-                        ]);
-                    }
+                    console.log(err.message);
                 }
                 else {
-                    console.log({ err });
+                    console.log("An unknown error occurred.");
                 }
             }
         }));
-        try {
-            try {
-                await pool.query("BEGIN");
-                const newUsersCountBatch = await upsertUsers(usersDb);
-                newUsersCount += newUsersCountBatch;
-                const newLeaguesCountBatch = await upsertLeagues(updatedLeagues);
-                newLeaguesCount += newLeaguesCountBatch;
-                const newTradeCountBatch = await upsertTrades(tradesBatch);
-                newTradeCount += newTradeCountBatch;
-                await pool.query("COMMIT");
-            }
-            catch (err) {
-                await pool.query("ROLLBACK");
-                console.error("Error upserting leagues:", err);
-            }
-        }
-        catch (err) {
-            console.error("Error connecting to the database:", err);
-        }
     }
-    console.log({ newUsersCount, newLeaguesCount, newTradeCount });
-    return updated_league_ids;
-};
-export const getLeagueDraftPicksObj = (league, rosters, users, upcomingDraft, tradedPicks) => {
-    const draftSeason = upcomingDraft
+    try {
+        await pool.query("BEGIN");
+        await upsertUsers(usersToUpsert);
+        await upsertLeagues(leaguesToUpsert);
+        await upsertTrades(tradesToUpsert);
+        await pool.query("COMMIT");
+    }
+    catch (err) {
+        if (err instanceof Error) {
+            console.log(err.message);
+        }
+        else {
+            console.log("An unknown error occurred.");
+        }
+        await pool.query("ROLLBACK");
+    }
+    return leaguesToUpsert;
+}
+function getLeagueDraftPicks(league, rosters, users, drafts, tradedPicks) {
+    const draftSeason = league.status === "pre_draft"
         ? parseInt(league.season)
         : parseInt(league.season) + 1;
-    const draft_order = upcomingDraft?.draft_order;
-    const leagueDraftPicksObj = {};
+    const draftOrder = drafts.find((draft) => draft.season === draftSeason.toString() &&
+        draft.settings.rounds === league.settings.draft_rounds)?.draft_order;
+    const startupCompletionTime = league.previous_league_id && parseInt(league.previous_league_id) > 0
+        ? 1
+        : drafts.find((draft) => draft.status === "complete" &&
+            draft.settings.rounds > league.settings.draft_rounds)?.last_picked ?? undefined;
+    const draftPicks = {};
     rosters.forEach((roster) => {
-        const draftPicksTeam = [];
-        const user = users.find((u) => u.user_id === roster.owner_id);
-        // loop through seasons (draft season and next two seasons)
-        for (let j = draftSeason; j <= draftSeason + 2; j++) {
-            // loop through rookie draft rounds
-            for (let k = 1; k <= league.settings.draft_rounds; k++) {
-                // check if each rookie pick is in traded picks
-                const isTraded = tradedPicks.find((pick) => parseInt(pick.season) === j &&
-                    pick.round === k &&
-                    pick.roster_id === roster.roster_id);
-                // if it is not in traded picks, add to original manager
-                if (!isTraded) {
-                    draftPicksTeam.push({
-                        season: j,
-                        round: k,
-                        roster_id: roster.roster_id,
-                        original_user: {
-                            avatar: user?.avatar || "",
-                            user_id: roster.owner_id,
-                            username: user?.display_name || "Orphan",
-                        },
-                        order: (draft_order &&
-                            j === parseInt(upcomingDraft.season) &&
-                            draft_order[roster?.owner_id]) ||
-                            null,
-                    });
-                }
-            }
-        }
-        tradedPicks
-            .filter((x) => x.owner_id === roster.roster_id && parseInt(x.season) >= draftSeason)
-            .forEach((pick) => {
-            const original_roster = rosters.find((t) => t.roster_id === pick.roster_id);
-            const original_user = users.find((u) => u.user_id === original_roster?.owner_id);
-            if (original_roster) {
-                draftPicksTeam.push({
-                    season: parseInt(pick.season),
-                    round: pick.round,
-                    roster_id: pick.roster_id,
-                    original_user: {
-                        avatar: original_user?.avatar || "",
-                        user_id: original_user?.user_id || "",
-                        username: original_user?.display_name || "Orphan",
-                    },
-                    order: (original_user &&
-                        draft_order &&
-                        parseInt(pick.season) === parseInt(upcomingDraft.season) &&
-                        draft_order[original_user?.user_id]) ||
-                        null,
+        const teamDraftPicks = [];
+        const user = users.find((user) => user.user_id === roster.owner_id);
+        for (let i = draftSeason; i <= draftSeason + 2; i++) {
+            for (let j = 1; j <= league.settings.draft_rounds; j++) {
+                const isTraded = tradedPicks.some((tradedPick) => parseInt(tradedPick.season) === i &&
+                    tradedPick.round === j &&
+                    tradedPick.roster_id === roster.roster_id);
+                if (isTraded)
+                    continue;
+                teamDraftPicks.push({
+                    season: i,
+                    round: j,
+                    roster_id: roster.roster_id,
+                    original_username: user?.display_name || "Orphan",
+                    order: (i === draftSeason && draftOrder?.[roster.owner_id]) || undefined,
                 });
             }
-        });
-        tradedPicks
-            .filter((x) => x.previous_owner_id === roster.roster_id &&
-            parseInt(x.season) >= draftSeason)
-            .forEach((pick) => {
-            const index = draftPicksTeam.findIndex((obj) => {
-                return (obj.season === parseInt(pick.season) &&
-                    obj.round === pick.round &&
-                    obj.roster_id === pick.roster_id);
-            });
-            if (index !== -1) {
-                leagueDraftPicksObj[roster.roster_id].splice(index, 1);
-            }
-        });
-        leagueDraftPicksObj[roster.roster_id] = draftPicksTeam;
+        }
+        draftPicks[roster.roster_id] = teamDraftPicks;
     });
-    return leagueDraftPicksObj;
-};
-export const getRostersUserInfo = (rosters, users, league_draftpicks_obj) => {
-    const rosters_username = rosters.map((roster) => {
+    tradedPicks
+        .filter((tradedPick) => parseInt(tradedPick.season) >= draftSeason)
+        .forEach((tradedPick) => {
+        const originalRoster = rosters.find((roster) => roster.roster_id === tradedPick.roster_id);
+        const originalUser = users.find((user) => user.user_id === originalRoster?.owner_id);
+        draftPicks[tradedPick.owner_id].push({
+            season: parseInt(tradedPick.season),
+            round: tradedPick.round,
+            roster_id: tradedPick.roster_id,
+            original_username: originalUser?.display_name || "Orphan",
+            order: tradedPick.season === draftSeason.toString()
+                ? originalRoster?.owner_id
+                    ? draftOrder?.[originalRoster.owner_id]
+                    : undefined
+                : undefined,
+        });
+        const index = draftPicks[tradedPick.previous_owner_id]?.findIndex((draftPick) => draftPick.season === parseInt(tradedPick.season) &&
+            draftPick.round === tradedPick.round &&
+            draftPick.roster_id === tradedPick.roster_id);
+        if (index) {
+            draftPicks[tradedPick.previous_owner_id].splice(index, 1);
+        }
+    });
+    return { draftPicks, draftOrder, startupCompletionTime };
+}
+function getRostersUsernames(rosters, users, draftPicks) {
+    const rostersUsernames = rosters.map((roster) => {
         const user = users.find((user) => user.user_id === roster.owner_id);
         return {
-            roster_id: roster.roster_id,
-            username: user?.display_name || "Orphan",
+            ...roster,
             user_id: roster.owner_id,
-            avatar: user?.avatar || null,
-            players: roster.players,
-            draftpicks: league_draftpicks_obj[roster.roster_id] || [],
+            username: user?.display_name || "Orphan",
+            avatar: user?.avatar ?? null,
+            players: roster.players || [],
             starters: roster.starters || [],
-            starters_optimal_dynasty: [],
-            starters_optimal_redraft: [],
             taxi: roster.taxi || [],
             reserve: roster.reserve || [],
+            draftpicks: draftPicks?.[roster.roster_id] || [],
             wins: roster.settings.wins,
             losses: roster.settings.losses,
             ties: roster.settings.ties,
             fp: parseFloat(`${roster.settings.fpts}.${roster.settings.fpts_decimal || 0}`),
-            fpa: parseFloat(`${roster.settings.fpts_against || 0}.${roster.settings.fpts_against_decimal || 0}`),
+            fpa: parseFloat(`${roster.settings.fpts_against}.${roster.settings.fpts_against_decimal || 0}`),
         };
     });
-    return rosters_username;
-};
-export const getTrades = async (league, week, rosters, upcomingDraft, startupCompletionTime) => {
-    const tradesBatch = [];
+    return rostersUsernames;
+}
+async function getTrades(league, week, rosters, draftOrder, startupCompletionTime) {
+    if (league.settings.disable_trades)
+        return [];
     const transactions = await axiosInstance.get(`https://api.sleeper.app/v1/league/${league.league_id}/transactions/${week}`);
-    tradesBatch.push(...transactions.data
+    return transactions.data
         .filter((t) => t.type === "trade" &&
         t.status === "complete" &&
         startupCompletionTime &&
@@ -237,81 +159,108 @@ export const getTrades = async (league, week, rosters, upcomingDraft, startupCom
         .map((t) => {
         const adds = {};
         const drops = {};
-        const draft_picks = t.draft_picks.map((dp) => {
-            const original_user_id = rosters.find((ru) => ru.roster_id === dp.roster_id)?.user_id;
-            const order = (upcomingDraft?.draft_order &&
-                original_user_id &&
-                parseInt(upcomingDraft.season) === parseInt(dp.season) &&
-                upcomingDraft.draft_order[original_user_id]) ||
-                null;
+        const draftPicks = t.draft_picks.map((draftPick) => {
+            const originalUserId = rosters.find((roster) => roster.roster_id === draftPick.roster_id)?.user_id;
+            const order = draftPick.season === league.season
+                ? draftOrder?.[originalUserId || ""]
+                : undefined;
             return {
-                round: dp.round,
-                season: dp.season,
-                new: rosters.find((ru) => ru.roster_id === dp.owner_id)?.user_id,
-                old: rosters.find((ru) => ru.roster_id === dp.previous_owner_id)
-                    ?.user_id,
-                original: rosters.find((ru) => ru.roster_id === dp.roster_id)
-                    ?.user_id,
-                order: order,
+                season: draftPick.season,
+                round: draftPick.round,
+                new: rosters.find((roster) => roster.roster_id === draftPick.owner_id)
+                    ?.user_id ?? "0",
+                old: rosters.find((roster) => roster.roster_id === draftPick.previous_owner_id)?.user_id ?? "0",
+                original: rosters.find((roster) => roster.roster_id === draftPick.roster_id)
+                    ?.username ?? "Team " + draftPick,
+                order,
             };
         });
         if (t.adds) {
             Object.keys(t.adds).forEach((add) => {
-                const manager = rosters.find((ru) => ru.roster_id === t.adds[add]);
+                const manager = rosters.find((roster) => roster.roster_id === t.adds[add]);
                 adds[add] = manager?.user_id || "0";
             });
         }
         if (t.drops) {
             Object.keys(t.drops).forEach((drop) => {
-                const manager = rosters.find((ru) => ru.roster_id === t.drops[drop]);
+                const manager = rosters.find((roster) => roster.roster_id === t.drops[drop]);
                 drops[drop] = manager?.user_id || "0";
             });
         }
-        const managers = Array.from(new Set([
-            ...Object.values(adds || {}),
-            ...Object.values(drops || {}),
-            ...draft_picks.map((dp) => dp.new),
-        ]));
         return {
-            ...t,
+            transaction_id: t.transaction_id,
+            status_updated: t.status_updated,
             league_id: league.league_id,
-            status_updated: new Date(t.status_updated),
-            rosters,
-            draft_picks,
-            managers,
+            league: {
+                league_id: league.league_id,
+                name: league.name,
+                avatar: league.avatar,
+                roster_positions: league.roster_positions || [],
+                scoring_settings: league.scoring_settings || {},
+                settings: league.settings,
+                status: league.status,
+                season: league.season,
+            },
             adds,
             drops,
+            draft_picks: draftPicks,
+            rosters: rosters.map((roster) => ({
+                roster_id: roster.roster_id,
+                user_id: roster.user_id,
+                username: roster.username,
+                avatar: roster.avatar,
+                players: roster.players,
+                draftPicks: roster.draftpicks,
+                wins: roster.wins,
+                losses: roster.losses,
+                ties: roster.ties,
+                fp: roster.fp,
+                fpa: roster.fpa,
+            })),
         };
-    }));
-    return tradesBatch;
-};
-export const upsertLeagues = async (updatedLeagues) => {
-    if (updatedLeagues.length === 0)
-        return 0;
-    const upsertLeaguesQuery = `
-    WITH new AS (
-      INSERT INTO leagues (league_id, name, avatar, season, status, settings, scoring_settings, roster_positions, rosters, updated_at)
-      VALUES ${updatedLeagues
-        .map((_, i) => `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${i * 10 + 4}, $${i * 10 + 5}, $${i * 10 + 6}, $${i * 10 + 7}, $${i * 10 + 8}, $${i * 10 + 9}, $${i * 10 + 10})`)
-        .join(", ")}
-      ON CONFLICT (league_id) DO UPDATE SET
-        name = EXCLUDED.name,
-        avatar = EXCLUDED.avatar,
-        season = EXCLUDED.season,
-        status = EXCLUDED.status,
-        settings = EXCLUDED.settings,
-        scoring_settings = EXCLUDED.scoring_settings,
-        roster_positions = EXCLUDED.roster_positions,
-        rosters = EXCLUDED.rosters,
-        updated_at = EXCLUDED.updated_at
-      RETURNING (xmax = 0) AS inserted
-    )
-    SELECT
-      COUNT(*) AS inserted
-    FROM new
-    WHERE inserted;
+    });
+}
+async function upsertUsers(users) {
+    if (users.length === 0)
+        return;
+    const upsertUsersQuery = `
+    INSERT INTO users (user_id, username, avatar, type)
+    VALUES ${users
+        .map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`)
+        .join(",")}
+    ON CONFLICT (user_id) DO UPDATE SET
+      username = EXCLUDED.username,
+      avatar = EXCLUDED.avatar,
+      type = CASE
+        WHEN users.type = 'S' THEN users.type
+        ELSE EXCLUDED.type
+      END;
   `;
-    const values = updatedLeagues.flatMap((league) => [
+    const values = users.flatMap((user) => [
+        user.user_id,
+        user.username,
+        user.avatar,
+        user.type,
+    ]);
+    await pool.query(upsertUsersQuery, values);
+    return;
+}
+async function upsertLeagues(leagues) {
+    if (leagues.length === 0)
+        return;
+    const upserLeaguesQuery = `
+    INSERT INTO leagues (league_id, name, avatar, season, status, settings, scoring_settings, roster_positions, rosters)
+    VALUES ${leagues.map((_, i) => `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${i * 9 + 5}, $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`)}    ON CONFLICT (league_id) DO UPDATE SET
+      name = EXCLUDED.name,
+      avatar = EXCLUDED.avatar,
+      season = EXCLUDED.season,
+      status = EXCLUDED.status,
+      settings = EXCLUDED.settings,
+      scoring_settings = EXCLUDED.scoring_settings,
+      roster_positions = EXCLUDED.roster_positions,
+      rosters = EXCLUDED.rosters;
+  `;
+    const values = leagues.flatMap((league) => [
         league.league_id,
         league.name,
         league.avatar,
@@ -321,115 +270,28 @@ export const upsertLeagues = async (updatedLeagues) => {
         JSON.stringify(league.scoring_settings),
         JSON.stringify(league.roster_positions),
         JSON.stringify(league.rosters),
-        league.updated_at,
     ]);
-    let newLeaguesCount = 0;
-    try {
-        const upserted = await pool.query(upsertLeaguesQuery, values);
-        newLeaguesCount = parseInt(upserted.rows[0].inserted);
-    }
-    catch (err) {
-        if (err instanceof Error) {
-            console.log(err.message);
-        }
-        else {
-            console.log({ err });
-        }
-    }
-    return newLeaguesCount;
-};
-export const upsertTrades = async (trades) => {
+    await pool.query(upserLeaguesQuery, values);
+    return;
+}
+async function upsertTrades(trades) {
     if (trades.length === 0)
-        return 0;
+        return;
     const upsertTradesQuery = `
-    WITH new AS (
-      INSERT INTO trades (transaction_id, status_updated, adds, drops, draft_picks, price_check, rosters, managers, players, league_id)
-      VALUES ${trades
-        .map((_, i) => `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${i * 10 + 4}, $${i * 10 + 5}, $${i * 10 + 6}, $${i * 10 + 7}, $${i * 10 + 8}, $${i * 10 + 9}, $${i * 10 + 10})`)
-        .join(", ")}
-      ON CONFLICT (transaction_id) DO UPDATE SET
-        draft_picks = EXCLUDED.draft_picks,
-        price_check = EXCLUDED.price_check,
-        players = EXCLUDED.players,
-        managers = EXCLUDED.managers
-      RETURNING (xmax = 0) AS inserted
-    )
-    SELECT
-        COUNT(*) AS inserted
-    FROM new
-    WHERE inserted;
+    INSERT INTO trades (transaction_id, status_updated, league_id, adds, drops, draft_picks, rosters)
+    VALUES ${trades.map((_, i) => `($${i * 7 + 1}, $${i * 7 + 2}, $${i * 7 + 3}, $${i * 7 + 4}, $${i * 7 + 5}, $${i * 7 + 6}, $${i * 7 + 7})`)}
+    ON CONFLICT (transaction_id) DO UPDATE SET
+      draft_picks = EXCLUDED.draft_picks;
   `;
     const values = trades.flatMap((trade) => [
         trade.transaction_id,
-        trade.status_updated,
+        new Date(trade.status_updated),
+        trade.league_id,
         JSON.stringify(trade.adds),
         JSON.stringify(trade.drops),
         JSON.stringify(trade.draft_picks),
-        trade.price_check,
         JSON.stringify(trade.rosters),
-        trade.managers,
-        trade.players,
-        trade.league_id,
     ]);
-    let newTradeCount = 0;
-    try {
-        const upserted = await pool.query(upsertTradesQuery, values);
-        newTradeCount = parseInt(upserted.rows[0].inserted);
-    }
-    catch (err) {
-        if (err instanceof Error) {
-            console.log(err.message);
-        }
-        else {
-            console.log({ err });
-        }
-    }
-    return newTradeCount;
-};
-export const upsertUsers = async (users) => {
-    if (users.length === 0)
-        return 0;
-    const upsertUsersQuery = `
-    WITH new AS (
-      INSERT INTO users (user_id, username, avatar, type, updated_at, created_at)
-      VALUES ${users
-        .map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`)
-        .join(", ")}
-      ON CONFLICT (user_id) DO UPDATE SET
-        username = EXCLUDED.username,
-        avatar = EXCLUDED.avatar,
-        type = CASE
-          WHEN users.type IN ('S', 'LM') THEN users.type
-          ELSE EXCLUDED.type
-        END,
-        updated_at = EXCLUDED.updated_at
-      RETURNING (xmax = 0) AS inserted
-    )
-    SELECT
-        COUNT(*) AS inserted
-    FROM new
-    WHERE inserted;
-  `;
-    const values = users.flatMap((user) => [
-        user.user_id,
-        user.username,
-        user.avatar,
-        user.type,
-        user.updated_at,
-        user.created_at,
-    ]);
-    let newUsersCount = 0;
-    try {
-        const upserted = await pool.query(upsertUsersQuery, values);
-        newUsersCount = parseInt(upserted.rows[0].inserted);
-    }
-    catch (err) {
-        if (err instanceof Error) {
-            console.log(err.message);
-        }
-        else {
-            console.log({ err });
-        }
-    }
-    return newUsersCount;
-};
+    await pool.query(upsertTradesQuery, values);
+    return;
+}

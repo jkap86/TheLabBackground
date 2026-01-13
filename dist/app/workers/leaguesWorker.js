@@ -105,8 +105,8 @@ parentPort?.on("message", async (message) => {
     const updated_league_ids = await updateLeagues([
         ...result.league_ids_queue_updated.slice(0, increment_leagues),
         ...(outOfDateLeagueIds || []),
-    ], outOfDateLeagueIds || [], week.toString());
+    ], outOfDateLeagueIds || [], week);
     console.log({ updated: updated_league_ids.length });
-    parentPort?.postMessage(result.league_ids_queue_updated.filter((l) => !updated_league_ids.includes(l)));
+    parentPort?.postMessage(result.league_ids_queue_updated.filter((league_id) => !updated_league_ids.some((l) => l.league_id === league_id)));
     parentPort?.close();
 });

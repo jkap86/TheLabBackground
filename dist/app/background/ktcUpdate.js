@@ -20,8 +20,7 @@ const startWorker = (app) => {
             console.log("KTC Worker completed successfully");
             const minute = new Date().getMinutes();
             const seconds = new Date().getSeconds();
-            const intervalMinutes = 5;
-            console.log({ seconds });
+            const intervalMinutes = 30;
             const delay = ((intervalMinutes - (minute % intervalMinutes)) * 60 - seconds) * 1000;
             console.log("Next KTC update at " + new Date(new Date().getTime() + delay));
             setTimeout(async () => startWorker(app), delay);

@@ -152,14 +152,14 @@ parentPort?.on("message", async (message) => {
       ...(outOfDateLeagueIds || []),
     ],
     outOfDateLeagueIds || [],
-    week.toString()
+    week
   );
 
   console.log({ updated: updated_league_ids.length });
 
   parentPort?.postMessage(
     result.league_ids_queue_updated.filter(
-      (l) => !updated_league_ids.includes(l)
+      (league_id) => !updated_league_ids.some((l) => l.league_id === league_id)
     )
   );
 

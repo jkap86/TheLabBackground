@@ -2,7 +2,6 @@ import axiosInstance from "../lib/axiosInstance.js";
 import * as cheerio from "cheerio";
 import { pool } from "../lib/pool.js";
 import { parentPort } from "worker_threads";
-import fs from "fs";
 
 type KtcPlayerDbUpdate = {
   player_id: string;
