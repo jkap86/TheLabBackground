@@ -157,8 +157,6 @@ parentPort?.on("message", async (message) => {
 
   console.log({ updated: updated_league_ids.length });
 
-  console.log(updated_league_ids[0]);
-
   parentPort?.postMessage(
     result.league_ids_queue_updated.filter(
       (league_id) => !updated_league_ids.some((l) => l.league_id === league_id)

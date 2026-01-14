@@ -273,10 +273,6 @@ async function getTrades(
   draftOrder: { [key: string]: number } | undefined,
   startupCompletionTime: number | undefined
 ) {
-  console.log({
-    startupCompletionTime,
-    disable_trades: league.settings.disable_trades,
-  });
   if (league.settings.disable_trades) return [];
 
   const transactions: { data: SleeperTransaction[] } = await axiosInstance.get(
@@ -288,8 +284,7 @@ async function getTrades(
       (t) =>
         t.type === "trade" &&
         t.status === "complete" &&
-        startupCompletionTime &&
-        t.status_updated > startupCompletionTime
+        (!startupCompletionTime || t.status_updated > startupCompletionTime)
     )
     .map((t) => {
       const adds: { [player_id: string]: string } = {};
@@ -375,7 +370,6 @@ async function getTrades(
       };
     });
 
-  console.log({ trades });
   return trades;
 }
 
@@ -449,7 +443,6 @@ async function upsertLeagues(leagues: League[]) {
 }
 
 async function upsertTrades(trades: Trade[]) {
-  console.log(`Upserting ${trades.length} trades...`);
   if (trades.length === 0) return;
 
   const upsertTradesQuery = `
