@@ -1,6 +1,7 @@
 import axiosInstance from "../lib/axiosInstance.js";
 import { pool } from "../lib/pool.js";
 export async function updateLeagues(toUpdate, db, week) {
+    console.log(`Updating ${toUpdate.length} leagues...`);
     const usersToUpsert = [];
     const leaguesToUpsert = [];
     const tradesToUpsert = [];
@@ -27,6 +28,7 @@ export async function updateLeagues(toUpdate, db, week) {
                     }
                 });
                 const trades = await getTrades(league.data, week, rostersUsername, draftOrder, startupCompletionTime);
+                console.log(`Found ${trades.length} trades for league ${league.data.name} (${league.data.league_id})`);
                 tradesToUpsert.push(...trades);
                 leaguesToUpsert.push({
                     league_id: league.data.league_id,
@@ -148,10 +150,14 @@ function getRostersUsernames(rosters, users, draftPicks) {
     return rostersUsernames;
 }
 async function getTrades(league, week, rosters, draftOrder, startupCompletionTime) {
+    console.log({
+        startupCompletionTime,
+        disable_trades: league.settings.disable_trades,
+    });
     if (league.settings.disable_trades)
         return [];
     const transactions = await axiosInstance.get(`https://api.sleeper.app/v1/league/${league.league_id}/transactions/${week}`);
-    return transactions.data
+    const trades = transactions.data
         .filter((t) => t.type === "trade" &&
         t.status === "complete" &&
         startupCompletionTime &&
@@ -219,6 +225,8 @@ async function getTrades(league, week, rosters, draftOrder, startupCompletionTim
             })),
         };
     });
+    console.log({ trades });
+    return trades;
 }
 async function upsertUsers(users) {
     if (users.length === 0)
@@ -275,6 +283,7 @@ async function upsertLeagues(leagues) {
     return;
 }
 async function upsertTrades(trades) {
+    console.log(`Upserting ${trades.length} trades...`);
     if (trades.length === 0)
         return;
     const upsertTradesQuery = `
