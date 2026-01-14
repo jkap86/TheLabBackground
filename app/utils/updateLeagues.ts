@@ -82,6 +82,10 @@ export async function updateLeagues(
             startupCompletionTime
           );
 
+          console.log(
+            `Found ${trades.length} trades for league ${league.data.name} (${league.data.league_id})`
+          );
+
           tradesToUpsert.push(...trades);
 
           leaguesToUpsert.push({
@@ -436,6 +440,7 @@ async function upsertLeagues(leagues: League[]) {
 }
 
 async function upsertTrades(trades: Trade[]) {
+  console.log(`Upserting ${trades.length} trades...`);
   if (trades.length === 0) return;
 
   const upsertTradesQuery = `
