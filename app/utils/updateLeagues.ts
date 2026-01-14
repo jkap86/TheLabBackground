@@ -85,7 +85,7 @@ export async function updateLeagues(
           );
 
           console.log(
-            `Found ${trades.length} trades for league ${league.data.name} (${league.data.league_id})`
+            `${trades.length} trades for ${league.data.name} (${league.data.league_id})`
           );
 
           tradesToUpsert.push(...trades);
@@ -369,6 +369,12 @@ async function getTrades(
         })),
       };
     });
+
+  console.log(
+    transactions.data.filter(
+      (t) => t.type === "trade" && t.status === "complete"
+    ).length
+  );
 
   return trades;
 }
