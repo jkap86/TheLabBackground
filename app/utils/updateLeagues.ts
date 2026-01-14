@@ -16,6 +16,8 @@ export async function updateLeagues(
   db: string[],
   week: number
 ) {
+  console.log(`Updating ${toUpdate.length} leagues...`);
+
   const usersToUpsert: User[] = [];
   const leaguesToUpsert: League[] = [];
   const tradesToUpsert: Trade[] = [];
