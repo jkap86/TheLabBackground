@@ -271,13 +271,17 @@ async function getTrades(
   draftOrder: { [key: string]: number } | undefined,
   startupCompletionTime: number | undefined
 ) {
+  console.log({
+    startupCompletionTime,
+    disable_trades: league.settings.disable_trades,
+  });
   if (league.settings.disable_trades) return [];
 
   const transactions: { data: SleeperTransaction[] } = await axiosInstance.get(
     `https://api.sleeper.app/v1/league/${league.league_id}/transactions/${week}`
   );
 
-  return transactions.data
+  const trades = transactions.data
     .filter(
       (t) =>
         t.type === "trade" &&
@@ -368,6 +372,9 @@ async function getTrades(
         })),
       };
     });
+
+  console.log({ trades });
+  return trades;
 }
 
 async function upsertUsers(users: User[]) {
