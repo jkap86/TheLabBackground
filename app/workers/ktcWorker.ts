@@ -54,7 +54,7 @@ setTimeout(async () => {
   }
 }, 5000);
 
-const controlValue = new Date().getTime() - 12 * 60 * 60 * 1000;
+const controlValue = new Date().getTime() - 24 * 60 * 60 * 1000;
 
 const syncKtcDynastyValues = async () => {
   parentPort?.postMessage(true);
